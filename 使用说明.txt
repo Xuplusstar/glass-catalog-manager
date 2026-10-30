@@ -1,0 +1,72 @@
+玻璃库管理 1.2.0 · Zemax / CODE V
+
+一、打开与分享
+分享版：先解压整个 ZIP，再双击 GlassCatalog.exe。保留同目录的 _internal 文件夹。
+接收方无需安装 Python 或 MATLAB。适用 Windows 10 / 11，64 位。
+分享时发送整个 ZIP；不包含你的玻璃库、镜头文件或个人设置。
+本机源码入口“打开玻璃库管理.bat”仍可使用。
+当前为开发中的免安装版；正式安装、升级和软件卸载入口将在功能定版后提供。
+
+二、转换与筛选
+1. 添加一个或多个 Zemax AGF / CODE V XML。
+2. 在“玻璃库与筛选”挑选材料。供应状态按来源软件的原生分类多选，不选则不限；CODE V 的最高/较高/低熔炼频率、请询厂家等按原码显示，不再归为“特殊”。
+   Zemax 的熔炼频率另有 1～5 等级，可在“筛选条件”内单独多选，1 很频繁、5 很少。材料列表和详情显示原始状态与频率。
+   成都光明 MA/A/B/C/D 是厂家生产频率；软件数值可能合并厂家分级（如 C/D 共用 4），不能仅凭软件数值准确还原字母。
+   要按厂家字母筛选，在“导出设置 → 厂家生产频率表”选择 CSV/TSV/XLSX；CDGM 等可从文件名识别厂家，不能识别时填写厂家缩写后点“读取表”。
+   回到筛选页选择“厂家分级”，支持 MA/A/B/C/D 多选。表头含 Glass/牌号 和 Melt Frequency/生产频率 两列。程序只按厂家库名和牌号匹配，未匹配显示“—”，不猜测。
+   表不改变原始光学库，导出报告记录来源、版本和分级；下次打开会重新读取记住的表。表与原库版本不同时请核对来源。
+3. 透过率条件填写波长 nm、厚度 mm 和百分比上下限，例如 550 nm、10 mm、下限 95。
+   此处是内透过率，不含表面反射。只在实测曲线覆盖波长内插值，厚度按指数规律换算。
+   缺少数据的材料在设置透过率阈值时排除；未设阈值不因此排除。
+4. 底部填写新库名（英文字母开头，字母、数字、下划线），选择 XML / AGF / DAT。
+5. “导出筛选结果”保存列表里的全部材料；“仅导出选中”只保存 Ctrl / Shift 选中的行。
+   “转换并安装”默认使用筛选结果；只装选中的行需在“导出设置”勾选相应选项。
+
+三、安装到 CODE V
+选 CODE V XML，核对“导出设置”的 CODE V 安装位置，点击“转换并安装到 CODE V”。
+程序转换、生成 XML 与单库材料 DAT、合并 CatalogFull.dat 和 dndt_constants.dat、备份并安装。
+成功信息在页面内显示，没有提示音；“查看详情”可复制输出路径和备份位置。
+仅“导出”不会安装。已有完整包也可用左侧“安装已有导出包”。
+CODE V 库卸载从左侧入口选择库，自动备份并清理该库文件和两张当前总表中的该库行。
+
+四、Zemax 库管理
+选 Zemax AGF，主按钮会切换为“转换并安装到 Zemax”。
+在“Zemax 库管理”确认 Zemax 实际使用的 Glasscat 文件夹，支持查看、安装已有 AGF、备份、卸载和恢复。
+双击已安装库可载入筛选工作区。更新、卸载前备份 AGF 和旧 BGF，Zemax 会自动再生成缓存。
+安装 AGF 后，在目标镜头 System Explorer → Material Catalogs 中加入库名。
+反向转换若有多组透过率厚度，在“导出设置”选定要保留的厚度（mm）。
+
+五、Glass Expert DAT
+1. 底部“导出为”选择 Glass Expert DAT。
+2. 在“导出设置”核对 CODE V 安装位置，再点击“选择已安装库”。
+3. 勾选一个或多个已安装 XML 库，点击“载入所选库”，可按库文件名搜索。
+4. 筛选材料，填写“清单名称”，点击“导出 DAT 清单”。只需部分材料时，用 Ctrl / Shift 选行并点“仅导出选中 · DAT”。
+DAT 保留原库名和牌号，导出前核对实际已安装的材料；库被卸载或牌号改名时会提示重新选择。
+AGF 或外部 XML 请先以 CODE V XML 转换并安装，再从已安装库选择。DAT 不再自动生成新库。
+DAT 与 AGF/XML 转换保留各自的材料来源；切回原格式可继续转换。更改 CODE V 位置后需重新选择 DAT 库。
+在 CODE V Glass Expert 中选 USER，并把导出的 DAT 指定为 User Catalog。
+它不是带 Surfaces、AUTO 等配置的优化输入文件，也不是完整玻璃库。
+
+六、让 AI 使用
+分享包中 GlassCatalogCLI.exe 可直接调用相同功能，不需要 Python，支持 --json。
+skill/glass-catalog 中提供 AI 技能，config.json 相对指向同包的两个 EXE。
+将技能路径配置给 AI；保持目录位置，若单独移动 skill，需修改 config 中的程序路径。
+示例：GlassCatalogCLI.exe inspect "材料.AGF" --supply-status agf:0 agf:1 --melt-frequency 1 2 3 --it-at-nm 550 --it-thickness-mm 10 --it-min 95 --json
+CODE V 原生状态示例：GlassCatalogCLI.exe inspect "C:\CODEV202503\glass\CDGM.xml" --supply-status codev:10 codev:11 codev:12 --json
+厂家分级示例：GlassCatalogCLI.exe inspect "CDGM.AGF" --supplier-table "CDGM202509.xlsx" --supplier-grade MA A B --json
+Zemax 管理：GlassCatalogCLI.exe zemax list --glasscat "D:\Zemax\Glasscat" --json
+更多转换、CODE V 和 DAT 参数见详细说明.md 或各命令 --help。
+
+七、文件位置与当前范围
+分享版自动安装导出：当前用户“文档\玻璃库管理\exports”。手动导出可自选位置。
+目录设置：当前用户 AppData\Local\GlassCatalog\settings.json。
+Zemax 备份：所选 Glasscat\catalog_backups；CODE V 备份位置在结果详情中。
+两台电脑的 Zemax / CODE V 目录可能不同，首次使用请核对本机位置。
+当前跨格式支持公式 1 / 2 / 3 与等价六系数模型，其他模型会明确提示。
+文件检查通过后仍需在软件中查询新库，确认识别与实际光学数据；所有属性并非全量无损。
+跨格式热学数据等已知边界见详细说明.md，保留原始材料库和导出报告。
+
+八、示例文件
+实际示例可直接选择 Zemax 实际使用的 Glasscat 中的 AGF，或 CODE V 安装目录 glass 中的 XML。
+本机项目 examples 中保留从这两个位置复制的原文件，另有来源说明；旧试验输出不作为新的示例。
+分享包和公开仓库不附厂家玻璃库。测试采用合成材料，运行自检不会修改你的软件安装目录。

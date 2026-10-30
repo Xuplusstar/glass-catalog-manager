@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zemax / CODE V 玻璃库管理"
+  short_description: "双向转换、原生供应状态与熔炼频率筛选、两边库管理及 Glass Expert DAT"
+  default_prompt: "使用 $glass-catalog 按要求转换、筛选和管理 Zemax / CODE V 玻璃库，或从 CODE V 已安装库导出 Glass Expert DAT，并核对文件及引用。"

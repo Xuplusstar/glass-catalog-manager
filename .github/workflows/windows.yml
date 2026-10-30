@@ -1,0 +1,40 @@
+name: Windows validation and build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          architecture: x64
+          cache: pip
+      - run: python -m pip install -r requirements-build.txt
+      - name: Test common core and real Qt callbacks
+        run: python -m unittest discover -s tests -v
+      - name: Build portable executables
+        run: python build_release.py
+      - name: Validate relocated ZIP without Python on child PATH
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem release/GlassCatalog-*-Windows-x64.zip | Select-Object -First 1
+          python verify_release.py $package.FullName --report build/verification.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GlassCatalog-Windows-x64
+          path: |
+            release/*.zip
+            build/verification*.json
+            build/verification*.png
