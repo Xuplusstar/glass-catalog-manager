@@ -26,6 +26,8 @@ python -X utf8 $glassTool codev prepare 'D:\glass\CUSTOM.xml' --codev-root 'C:\C
 
 通过 `convert --codev-root` 生成的包另附 `conversion-report.json`，包含筛选、名称映射和透过率自动处理记录。仅生成文件不改写 CODE V；人工窗口“一键转换并安装到 CODE V”或转换参数 `--install-codev` 自动执行备份安装。“安装已有导出包”则用于已有的文件包。
 
+人工管理页安装已有包时，包内的目标目录必须与当前选定的 CODE V 位置一致；不同电脑或安装位置应重新准备完整包。
+
 合并规则：保留其他 Catalog 的记录和原表头；用最终 XML 的完整材料集合替换同名 Catalog 的旧行。再次更新缩小后的库时，旧库中不再存在的材料行也会移除，避免 XML 与总表不一致。核对 `table_changes` 的新行数和被替换行数。
 
 本机 `dndt_constants.dat` 第一行为 `Version#3`。`dndtcalc.seq` 会检查版本（原文件第 172–198 行）；辅助脚本保留版本头、列顺序和换行格式。`catalog_tables/` 的单库增量不能直接覆盖软件的完整总表。
@@ -60,7 +62,9 @@ python -X utf8 $glassTool codev verify 'D:\glass\CUSTOM_install' --json
 
 ## 卸载指定库
 
-用户明确要求移除某个库时，核对库名和目标 CODE V 目录后执行；人工窗口的“卸载 CODE V 玻璃库”直接列出 `glass/` 中的 XML 库，无需安装清单。
+查看库用 `codev list --codev-root <目标目录> --json`。人工在侧栏“玻璃库管理 → CODE V 库管理”中选安装位置，列表显示 `glass/` 中的 XML、材料数量与数据提示，双击可载入筛选工作区；管理页上方可安装已有完整导出包。
+
+用户明确要求移除某个库时，核对库名和目标 CODE V 目录后执行；人工在同一管理页选中一行，点底部“卸载选中的库”，无需安装清单。CODE V 与 Zemax 管理页的目录、列表和选中库操作位置一致。
 
 ```powershell
 python -X utf8 $glassTool codev uninstall CUSTOM --codev-root 'C:\CODEV202503' --json

@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 import os
 from pathlib import Path
 import sys
@@ -65,20 +66,75 @@ class ManualExportTests(unittest.TestCase):
         self.app.show()
         for expanded in (False, True):
             self.app.filter_button.setChecked(expanded)
-            for page in ("browse", "settings", "zemax"):
+            for page in ("browse", "settings", "codev", "zemax"):
                 with self.subTest(page=page, expanded=expanded):
                     self.app.nav_buttons[page].click()
                     self.app.notify("已完成操作", "详情可展开，默认不占用材料列表空间。")
                     self.qt_app.processEvents()
-                    widgets = [self.app.uninstall_button, self.app.nav_buttons["zemax"]]
-                    widgets += ([self.app.zemax_uninstall_button] if page == "zemax" else
-                                [self.app.install_button, self.app.export_button, self.app.export_selection_button])
+                    widgets = [self.app.nav_buttons["codev"], self.app.nav_buttons["zemax"]]
+                    widgets += ([getattr(self.app, page + "_uninstall_button")] if page in {"codev", "zemax"} else
+                                [self.app.install_button, self.app.export_button, self.app.export_selection_button, self.app.catalog_name])
                     for widget in widgets:
                         self.assertTrue(widget.isVisible())
                         bounds = QRect(widget.mapTo(self.app, QPoint()), widget.size())
                         self.assertTrue(self.app.rect().contains(bounds), (widget.text(), bounds))
                     if page == "browse":
                         self.assertGreater(self.app.table.viewport().height(), 40)
+
+    def test_names_follow_sources_and_filters_without_overwriting_manual_name(self):
+        today = datetime.now().strftime("%Y%m%d")
+        self.app.update_catalog_name(force=True)
+        self.assertEqual(self.app.catalog_name.text(), "SOURCE_" + today)
+        self.app.values["nd_min"].setText("1.5")
+        self.app.apply_filters()
+        self.assertEqual(self.app.catalog_name.text(), "SOURCE_FILTERED_" + today)
+        self.app.catalog_name.setText("MY_LIBRARY")
+        self.app.reset_filters()
+        self.assertEqual(self.app.catalog_name.text(), "MY_LIBRARY")
+        self.app.catalog_name.clear()
+        self.app.apply_filters()
+        self.assertEqual(self.app.catalog_name.text(), "SOURCE_" + today)
+        second = self.work / "SECOND.AGF"
+        second.write_bytes(self.source.read_bytes())
+        self.app.catalogs.append(gc.load_catalog(second))
+        self.app.apply_filters()
+        self.assertEqual(self.app.catalog_name.text(), "MIXED_" + today)
+        self.app.active_filters = {"supplier_grade": ["MA", "A", "B"]}
+        self.app.update_catalog_name(force=True)
+        self.assertEqual(self.app.catalog_name.text(), "MIXED_MA_A_B_" + today)
+
+    def test_dat_and_catalog_names_are_remembered_separately(self):
+        self.app.set_output_format("agf")
+        self.app.catalog_name.setText("MY_LIBRARY")
+        self.app.set_output_format("dat")
+        self.assertIn("EXPERT", self.app.catalog_name.text())
+        self.app.catalog_name.setText("MY_CANDIDATES")
+        self.app.set_output_format("xml")
+        self.assertEqual(self.app.catalog_name.text(), "MY_LIBRARY")
+        self.app.set_output_format("dat")
+        self.assertEqual(self.app.catalog_name.text(), "MY_CANDIDATES")
+
+    def test_save_dialog_rename_updates_catalog_bundle_and_next_directory(self):
+        output = self.work / "renamed/RENAMED.xml"
+        self.export_to(output)
+        report = json.loads(output.with_suffix(".xml.report.json").read_text(encoding="utf-8"))
+        self.assertEqual(ET.parse(output).findtext("Name"), "RENAMED")
+        self.assertEqual(report["catalog"], "RENAMED")
+        self.assertTrue((Path(report["codev_bundle"]) / "glass/RENAMED.xml").is_file())
+        self.assertEqual(self.app.catalog_name.text(), "RENAMED")
+        with patch("glass_catalog_ui.QFileDialog.getSaveFileName", return_value=("", "")) as picker:
+            self.app.export(False)
+        self.assertEqual(Path(picker.call_args.args[2]), output)
+        self.app.set_output_format("agf")
+        self.export_to(self.work / "NO_SUFFIX")
+        self.assertEqual(gc.load_catalog(self.work / "NO_SUFFIX.agf").name, "NO_SUFFIX")
+
+    def test_save_rejects_a_suffix_that_differs_from_selected_format(self):
+        output = self.work / "WRONG.AGF"
+        with patch("glass_catalog_ui.QFileDialog.getSaveFileName", return_value=(str(output), "")):
+            self.app.export(False)
+        self.assertEqual(self.app.last_notice["level"], "error")
+        self.assertFalse(output.exists())
 
     def test_page_switch_and_format_change_retain_selection(self):
         self.app.table.selectRow(0)
@@ -171,13 +227,13 @@ class ManualExportTests(unittest.TestCase):
             self.app.convert_and_install()
             self.assert_success()
             self.assertTrue(verify(self.app.last_bundle)["ok"])
-            dialog = self.app.uninstall_codev()
-            choice = dialog.findChild(QComboBox, "catalogChoice")
-            remove = dialog.findChild(QPushButton, "uninstallSelected")
-            self.assertFalse(remove.isEnabled())
-            choice.setCurrentText("CUSTOM")
-            remove.click()
+            self.app.nav_buttons["codev"].click()
+            self.assertEqual(self.app.codev_table.rowCount(), 1)
+            self.assertFalse(self.app.codev_uninstall_button.isEnabled())
+            self.app.codev_table.selectRow(0)
+            self.app.codev_uninstall_button.click()
             self.assert_success()
+            self.assertEqual(self.app.codev_table.rowCount(), 0)
             folder_picker.assert_not_called()
             file_picker.assert_not_called()
         self.assertFalse((self.codev / "glass/CUSTOM.xml").exists())
@@ -375,7 +431,36 @@ class ManualExportTests(unittest.TestCase):
         self.assertEqual(self.app.filtered, [])
         self.assertIsNone(self.app.choose_expert_catalogs())
         self.assertEqual(self.app.last_notice["level"], "info")
-        self.assertEqual(self.app.current_page, "settings")
+        self.assertEqual(self.app.current_page, "codev")
+
+    def test_codev_manager_loads_into_conversion_and_dat_workspaces(self):
+        (self.codev / "glass").mkdir()
+        xml = self.codev / "glass/INSTALLED.xml"
+        gc.export_catalog(self.app.filtered, xml)
+        self.app.clear()
+        self.app.show_page("codev")
+        self.app.codev_table.selectRow(0)
+        self.app.codev_load_button.click()
+        self.assertEqual(self.app.current_page, "browse")
+        self.assertEqual([g.catalog for g in self.app.filtered], ["INSTALLED"])
+        self.app.set_output_format("dat")
+        self.app.show_page("codev")
+        self.app.codev_table.selectRow(0)
+        self.app.codev_load_button.click()
+        self.assertEqual([g.catalog for g in self.app.filtered], ["INSTALLED"])
+        self.assertEqual(len(self.app.catalogs), 1)
+        self.assertEqual(len(self.app.expert_catalogs), 1)
+
+    def test_zemax_manager_load_exits_dat_mode(self):
+        self.zemax.mkdir()
+        (self.zemax / self.source.name).write_bytes(self.source.read_bytes())
+        self.app.clear()
+        self.app.set_output_format("dat")
+        self.app.show_page("zemax")
+        self.app.zemax_table.selectRow(0)
+        self.app.zemax_load_button.click()
+        self.assertFalse(self.app.dat_mode)
+        self.assertEqual([g.name for g in self.app.filtered], ["TEST"])
 
     def test_dat_small_window_keeps_material_rows_visible_with_filters(self):
         (self.codev / "glass").mkdir()

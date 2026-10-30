@@ -106,11 +106,29 @@ def _glass_rows(glass):
     return fields, full, thermal
 
 
+def list_catalogs(codev_root):
+    root = Path(codev_root).resolve()
+    directory = root / "glass"
+    catalogs = []
+    for path in sorted(directory.glob("*"), key=lambda p: p.name.casefold()):
+        if path.suffix.lower() != ".xml" or not path.is_file():
+            continue
+        item = {"catalog": path.stem, "path": str(path)}
+        try:
+            library = load_catalog(path)
+            item.update(count=len(library.glasses), issues=sum(bool(g.issues) for g in library.glasses))
+        except (OSError, ValueError, ET.ParseError) as exc:
+            item.update(count=None, error=str(exc))
+        catalogs.append(item)
+    return {"ok": True, "codev_root": str(root), "exists": directory.is_dir(),
+            "count": len(catalogs), "catalogs": catalogs}
+
+
 def prepare(xml_file, codev_root, bundle_dir=None):
     source = Path(xml_file).resolve()
     root = Path(codev_root).resolve()
     bundle = (Path(bundle_dir).resolve() if bundle_dir is not None else
-              source.with_name(source.stem + "_CODEV_" + datetime.now().strftime("%Y%m%d_%H%M%S")))
+              source.with_name(source.stem + "_CODEV安装包_" + datetime.now().strftime("%Y%m%d_%H%M%S")))
     if root == bundle or root in bundle.parents:
         raise CatalogError("准备目录须位于 CODE V 安装目录之外")
     if bundle.exists() and any(bundle.iterdir()):
@@ -180,8 +198,10 @@ def _read_bundle(bundle_dir):
     return bundle, root, manifest
 
 
-def apply(bundle_dir):
+def apply(bundle_dir, codev_root=None):
     bundle, root, manifest = _read_bundle(bundle_dir)
+    if codev_root is not None and Path(codev_root).resolve() != root:
+        raise CatalogError(f"导出包的安装目标是 {root}，与当前选择的 CODE V 目录不同；请按当前目录重新生成完整包")
     # A staged full master table can otherwise undo another catalog installed since preparation.
     for item in manifest["files"]:
         target = root/item["file"]
@@ -271,6 +291,9 @@ def uninstall(catalog_name, codev_root, backup_dir=None):
 def main(argv=None):
     parser=argparse.ArgumentParser(description="准备、安装、卸载并检查 CODE V XML 与两个材料总表")
     sub=parser.add_subparsers(dest="action",required=True)
+    p=sub.add_parser("list",help="只读列出已安装的 XML 库、材料数量与数据提示")
+    p.add_argument("--codev-root",type=Path,required=True)
+    p.add_argument("--json",action="store_true")
     p=sub.add_parser("prepare",help="读取本机总表，在独立目录生成合并安装包")
     p.add_argument("xml",type=Path)
     p.add_argument("--codev-root",type=Path,required=True)
@@ -287,7 +310,9 @@ def main(argv=None):
     p.add_argument("--json",action="store_true")
     args=parser.parse_args(argv)
     try:
-        if args.action=="prepare":
+        if args.action=="list":
+            result=list_catalogs(args.codev_root)
+        elif args.action=="prepare":
             result=prepare(args.xml,args.codev_root,args.bundle)
         elif args.action=="apply":
             result=apply(args.bundle)

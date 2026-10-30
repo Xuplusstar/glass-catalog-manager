@@ -1,4 +1,4 @@
-# Zemax / CODE V 玻璃库管理 1.2.0
+# Zemax / CODE V 玻璃库管理 1.3.0
 
 同一个转换核心供人工窗口、AI skill 和独立命令行使用。支持 AGF ↔ CODE V XML、筛选组合建库、两边的材料库管理和 CODE V Glass Expert DAT 候选清单。无需 MATLAB。
 
@@ -6,21 +6,28 @@
 
 ## 人工使用与分享
 
-从 [GitHub Releases](https://github.com/Xuplusstar/glass-catalog-manager/releases) 下载 GlassCatalog-1.2.0-Windows-x64.zip，或使用本机构建的 release/ 中同名 ZIP。解压完整文件夹后双击 GlassCatalog.exe，不需要另装 Python。适用 Windows 10 / 11 x64。开发期间本机仍可双击“打开玻璃库管理.bat”，优先打开最新版打包程序，否则使用源码环境。
+从 [GitHub Releases](https://github.com/Xuplusstar/glass-catalog-manager/releases) 下载 GlassCatalog-1.3.0-Windows-x64.zip，或使用本机构建的 release/ 中同名 ZIP。解压完整文件夹后双击 GlassCatalog.exe，不需要另装 Python。适用 Windows 10 / 11 x64。开发期间本机仍可双击“打开玻璃库管理.bat”，优先打开最新版打包程序，否则使用源码环境。
 
 完整包保留 _internal、GlassCatalog.exe、GlassCatalogCLI.exe 和 skill/glass-catalog 的相对位置。不要只发主 EXE。包不包含用户的玻璃库、软件总表、镜头或个人设置。详细操作见[使用说明.txt](使用说明.txt)。
 
-窗口三个工作页：
+侧栏分“工作区”和“玻璃库管理”两组，CODE V 与 Zemax 管理页相邻同级：
 
 | 页面 | 用途 |
 |---|---|
 | 玻璃库与筛选 | 导入一个或多个 AGF / XML，查看参数、筛选与多选 |
 | 导出设置 | XML / AGF / DAT、命名前缀、透过率厚度、目标位置、DAT 已安装库选择 |
+| CODE V 库管理 | 已安装库查看、双击载入工作区、安装完整包、卸载并同步两张总表 |
 | Zemax 库管理 | 已安装库查看、双击载入工作区、安装已有 AGF、备份、卸载及恢复 |
+
+两个管理页均按“安装位置 → 安装操作 → 已安装库列表 → 选中库操作”排列，转换输出栏只在工作区出现。安装位置在各管理页修改，“导出设置”显示当前目标并提供跳转。
+
+新库自动按“来源库＋筛选标记＋日期”命名，例如 `CDGM_MA_A_B_20261030`；多来源用 `MIXED`，其他筛选加 `FILTERED`，DAT 加 `EXPERT`。来源名中的空格和连字符改为下划线。可手动修改，后续筛选不会覆盖手工名称；“自动命名”重新采用当前建议。DAT 与 AGF/XML 各自记住名称。
+
+保存窗口中最终选定的文件名会同步为库内名称和安装包中的库名；无扩展名时补齐当前格式，扩展名与所选格式不符时提示纠正。默认保存在 exports，并记住上次保存位置。完整包目录带有“CODEV安装包”字样，一键安装输出目录同时标注库名、目标软件和时间。CLI 仍可用 `--catalog-name` 显式指定库内名称。
 
 底部随格式联动：XML 为“转换并安装到 CODE V”，AGF 为“转换并安装到 Zemax”，DAT 为“导出 DAT 清单”。“导出筛选结果”保存当前列表全部材料，“仅导出选中”保存 Ctrl / Shift 选择的材料。一键安装默认用筛选结果；只装选中行需在导出设置勾选对应选项。DAT 独立保存已安装库选择，与原 AGF/XML 转换来源分开；切回原格式仍可继续转换。
 
-成功、失败、空结果均使用无声页内通知，详情可展开并复制；没有 QMessageBox 提醒或提示音。材料详情和卸载选择使用普通数据窗口。
+成功、失败、空结果均使用无声页内通知，详情可展开并复制；没有 QMessageBox 提醒或提示音。材料详情使用普通数据窗口，两个管理页均在列表中选库后卸载。
 
 ## 筛选规则
 
@@ -44,9 +51,9 @@ AGF 内透过率轻微超限（100%～100.1%）按用户确认的默认政策以
 
 选择 XML，默认同时生成 XML、单库 DAT、CatalogFull.dat 与 dndt_constants.dat，两张总表保留其他库。仅导出不会修改 CODE V。完整包在输出 XML 旁的带时间目录中，包含 glass/、macro/、catalog_tables/、manifest.json 与转换报告。
 
-“转换并安装到 CODE V”自动转换、建包、备份、同步四个文件并核对。侧栏可安装已有完整包或卸载已安装库。卸载先备份，再从当前总表清除该库行，保留其他库；不会用安装前的旧整表覆盖后来改动。
+“转换并安装到 CODE V”自动转换、建包、备份、同步四个文件并核对。进入侧栏“CODE V 库管理”可浏览已安装库、双击载入筛选工作区、安装已有完整包，或选中库后卸载。卸载先备份，再从当前总表清除该库行，保留其他库；不会用安装前的旧整表覆盖后来改动。CLI 只读列表使用 `codev list --codev-root <安装目录> --json`。
 
-完整包是所选 CODE V 的合并快照。目标总表自准备后发生变化会要求重新准备；分享程序或 XML 后应按接收方的实际目录重新建包，不能把别人的旧整表直接覆盖过来。
+完整包是所选 CODE V 的合并快照。人工安装时会核对包的目标与管理页所选目录一致；目标总表自准备后发生变化会要求重新准备。分享程序或 XML 后应按接收方的实际目录重新建包，不能把别人的旧整表直接覆盖过来。
 
 文件安装成功与软件识别分开记录。实际 CODE V 中用 GLD / GLI / GPR 查询库名、材料和数量；未做软件内查询就只说明文件已同步。用户禁止操控桌面时不启动交互。
 
@@ -161,7 +168,7 @@ python -m venv .build-venv
 $env:QT_QPA_PLATFORM='offscreen'
 python -X utf8 -m unittest discover -s tests -v
 GlassCatalog.exe --self-check <验证报告.json>
-python -X utf8 verify_release.py release/GlassCatalog-1.2.0-Windows-x64.zip --report build/verification.json
+python -X utf8 verify_release.py release/GlassCatalog-1.3.0-Windows-x64.zip --report build/verification.json
 ~~~
 
 独立程序自检使用合成材料和临时软件目录，核对打包后模块、样式资源、筛选与各文件流程，不打开或操控桌面。真实 Zemax / CODE V 中的导入识别及热学语义验收尚未完成；不将本版称为全公式 / 全属性无损转换器。

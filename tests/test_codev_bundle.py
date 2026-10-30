@@ -26,6 +26,23 @@ class BundleTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_list_installed_catalogs_keeps_readable_and_broken_files_without_writes(self):
+        directory = self.root / "glass"
+        directory.mkdir()
+        (directory / "CUSTOM.xml").write_bytes(self.xml.read_bytes())
+        (directory / "BROKEN.XML").write_text("<Catalog>")
+        before = {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        result = bundle.list_catalogs(self.root)
+        self.assertTrue(result["exists"])
+        self.assertEqual(result["count"], 2)
+        broken, custom = result["catalogs"]
+        self.assertIsNone(broken["count"])
+        self.assertIn("error", broken)
+        self.assertEqual(custom["count"], 2)
+        self.assertEqual(Path(custom["path"]), (directory / "CUSTOM.xml").resolve())
+        self.assertEqual(before, {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
+        self.assertFalse(bundle.list_catalogs(self.work / "MISSING")["exists"])
+
     def test_prepare_preserves_other_catalog_rows_and_thermal_version(self):
         target=self.work/'bundle'
         result=bundle.prepare(self.xml,self.root,target)
@@ -51,6 +68,15 @@ class BundleTests(unittest.TestCase):
         self.assertEqual((backup/'macro'/'dndt_constants.dat').read_bytes(),self.thermal)
         self.assertEqual(len(result['files']),4)
         self.assertTrue(bundle.verify(target)['ok'])
+
+    def test_apply_does_not_install_a_bundle_for_a_different_selected_directory(self):
+        target = self.work / 'bundle'
+        bundle.prepare(self.xml, self.root, target)
+        with self.assertRaises(CatalogError):
+            bundle.apply(target, self.work / 'OTHER_CODEV')
+        self.assertFalse((self.root / 'glass/CUSTOM.xml').exists())
+        self.assertEqual((self.root / 'macro/CatalogFull.dat').read_bytes(), self.full)
+        self.assertTrue(bundle.apply(target, self.root)['ok'])
 
     def test_updating_library_replaces_its_old_rows_without_duplication(self):
         first=self.work/'first'

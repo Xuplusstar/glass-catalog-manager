@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -17,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from glass_catalog import CatalogError, SUPPLY_STATUS_LABELS, export_catalog, load_catalog, select_glasses, transmission_at
-from codev_catalog_bundle import apply as install_bundle, uninstall as uninstall_catalog
+import codev_catalog_bundle as codev
 from glass_expert import installed_catalog_paths
 from supplier_catalog import GRADES, enrich_glasses, load_supplier_table
 import zemax_catalog_manager as zemax
@@ -128,6 +129,7 @@ class GlassCatalogWindow(QMainWindow):
         self.preferences = load_settings() if settings is None else {**default_settings(), **settings}
         self.persist_settings = persist_settings
         self.last_notice = None
+        self.codev_catalogs = []
         self.zemax_catalogs = []
         self.catalogs = []
         self.expert_catalogs = []
@@ -136,6 +138,8 @@ class GlassCatalogWindow(QMainWindow):
         self.filtered = []
         self.active_filters = {}
         self.last_bundle = None
+        self.name_suggestion = ""
+        self.output_names = {False: ("", ""), True: ("", "")}
         self.setWindowTitle(f"玻璃库管理 · Zemax / CODE V · {VERSION}")
         self.setWindowIcon(icon("glass", "#454751", 32))
         self.resize(1180, 800)
@@ -180,8 +184,14 @@ class GlassCatalogWindow(QMainWindow):
         for key, text, glyph, hint in (
             ("browse", "玻璃库与筛选", "library", "查看材料、设置筛选条件"),
             ("settings", "导出设置", "settings", "选择输出格式、设置安装目录"),
+            ("codev", "CODE V 库管理", "folder", "查看、载入、安装与卸载 CODE V XML 库"),
             ("zemax", "Zemax 库管理", "folder", "查看、安装、备份与卸载 Zemax AGF 库"),
         ):
+            if key == "codev":
+                side.addSpacing(18)
+                caption = label("玻璃库管理", "caption")
+                caption.setContentsMargins(12, 0, 0, 5)
+                side.addWidget(caption)
             nav = button(text, lambda checked=False, page=key: self.show_page(page), "nav", glyph)
             nav.setCheckable(True)
             nav.setToolTip(hint)
@@ -192,13 +202,6 @@ class GlassCatalogWindow(QMainWindow):
         self.library_summary.setContentsMargins(14, 14, 0, 0)
         side.addWidget(self.library_summary)
         side.addStretch()
-        caption = label("CODE V 库管理", "caption")
-        caption.setContentsMargins(12, 0, 0, 5)
-        side.addWidget(caption)
-        side.addWidget(button("安装已有导出包", self.install_codev, "sidebarAction", "install"))
-        self.uninstall_button = button("卸载 CODE V 玻璃库", self.uninstall_codev, "sidebarAction", "trash")
-        side.addWidget(self.uninstall_button)
-        side.addSpacing(16)
         footer_note = label(f"AGF  /  XML  /  DAT   ·   {VERSION}", "caption")
         footer_note.setContentsMargins(12, 0, 0, 0)
         side.addWidget(footer_note)
@@ -222,8 +225,9 @@ class GlassCatalogWindow(QMainWindow):
         headings.addWidget(self.page_title)
         headings.addWidget(self.page_description)
         header.addLayout(headings, 1)
-        header.addWidget(button("清空", self.clear, "text"))
-        format_badge = label("AGF  /  XML  /  DAT", "badge")
+        self.clear_button = button("清空", self.clear, "text")
+        header.addWidget(self.clear_button)
+        self.format_badge = format_badge = label("AGF  /  XML  /  DAT", "badge")
         format_badge.setFixedHeight(26)
         header.addWidget(format_badge, alignment=Qt.AlignmentFlag.AlignVCenter)
         content_layout.addLayout(header)
@@ -365,8 +369,11 @@ class GlassCatalogWindow(QMainWindow):
         card_layout.setContentsMargins(1, 0, 1, 0)
         card_layout.setSpacing(0)
         table_heading = QHBoxLayout()
+        table_heading.setSpacing(12)
         table_heading.setContentsMargins(18, 10, 18, 9)
         table_heading.addWidget(label("材料列表", "section"))
+        self.selection_summary = label("当前未选中材料", "muted")
+        table_heading.addWidget(self.selection_summary)
         table_heading.addStretch()
         self.count = label("尚未导入", "muted")
         table_heading.addWidget(self.count)
@@ -480,12 +487,10 @@ class GlassCatalogWindow(QMainWindow):
         installation_layout.setContentsMargins(21, 18, 21, 18)
         installation_layout.setSpacing(12)
         installation_layout.addWidget(label("CODE V 安装位置", "section"))
-        directory = QHBoxLayout()
-        self.codev_root = QLineEdit(self.preferences["codev_root"])
-        self.codev_root.setPlaceholderText("选择本机 CODE V 安装目录")
-        directory.addWidget(self.codev_root, 1)
-        directory.addWidget(button("选择目录", self.choose_codev_root, glyph="folder"))
-        installation_layout.addLayout(directory)
+        self.codev_target_summary = label(self.preferences["codev_root"], "description")
+        self.codev_target_summary.setWordWrap(True)
+        installation_layout.addWidget(self.codev_target_summary)
+        installation_layout.addWidget(button("打开 CODE V 库管理", lambda: self.show_page("codev"), glyph="folder"))
         self.include_codev_tables = QCheckBox("导出 CODE V 时同时生成材料目录和热光目录（含两张总表）")
         self.include_codev_tables.setChecked(True)
         installation_layout.addWidget(self.include_codev_tables)
@@ -540,57 +545,73 @@ class GlassCatalogWindow(QMainWindow):
         settings_layout.addWidget(supplier_card)
         settings_layout.addStretch()
 
-        manager = QWidget()
-        manager_layout = QVBoxLayout(manager)
-        manager_layout.setContentsMargins(0, 0, 0, 0)
-        manager_layout.setSpacing(12)
-        directory_card = QFrame()
-        directory_card.setProperty("role", "card")
-        directory_layout = QVBoxLayout(directory_card)
-        directory_layout.setContentsMargins(16, 14, 16, 14)
-        directory_layout.addWidget(label("Zemax Glasscat 文件夹", "section"))
-        zemax_directory = QHBoxLayout()
-        self.zemax_root = QLineEdit(self.preferences["zemax_glasscat"])
-        zemax_directory.addWidget(self.zemax_root, 1)
-        zemax_directory.addWidget(button("选择目录", self.choose_zemax_root, glyph="folder"))
-        zemax_directory.addWidget(button("刷新", self.refresh_zemax, glyph="reset"))
-        directory_layout.addLayout(zemax_directory)
-        manager_note = label("安装、更新与卸载前自动备份；Zemax 会自行生成 BGF 缓存。安装后在镜头的 Material Catalogs 中加入库名。", "muted")
-        manager_note.setWordWrap(True)
-        directory_layout.addWidget(manager_note)
-        manager_layout.addWidget(directory_card)
-        manager_actions = QHBoxLayout()
-        manager_actions.addWidget(button("安装已有 AGF", self.install_zemax_file, glyph="install"))
-        manager_actions.addWidget(button("从备份恢复", self.restore_zemax, glyph="reset"))
-        manager_actions.addStretch()
-        self.zemax_count = label("", "muted")
-        manager_actions.addWidget(self.zemax_count)
-        manager_layout.addLayout(manager_actions)
-        self.zemax_table = QTableWidget(0, 5)
-        self.zemax_table.setHorizontalHeaderLabels(("玻璃库", "材料数", "数据提示", "BGF 缓存", "文件位置"))
-        self.zemax_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.zemax_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.zemax_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.zemax_table.setShowGrid(False)
-        self.zemax_table.setWordWrap(False)
-        self.zemax_table.verticalHeader().hide()
-        self.zemax_table.verticalHeader().setDefaultSectionSize(38)
-        self.zemax_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.zemax_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        self.zemax_table.itemDoubleClicked.connect(lambda: self.load_zemax_selection())
-        manager_layout.addWidget(self.zemax_table, 1)
-        installed_actions = QHBoxLayout()
-        self.zemax_load_button = button("载入到筛选工作区", self.load_zemax_selection, glyph="library")
-        installed_actions.addWidget(self.zemax_load_button)
-        self.zemax_backup_button = button("备份选中的库", self.backup_zemax_selection, glyph="shield")
-        installed_actions.addWidget(self.zemax_backup_button)
-        installed_actions.addStretch()
-        self.zemax_uninstall_button = button("卸载选中的库", self.uninstall_zemax_selection, glyph="trash")
-        installed_actions.addWidget(self.zemax_uninstall_button)
-        manager_layout.addLayout(installed_actions)
-        self.zemax_table.itemSelectionChanged.connect(self.update_zemax_selection)
-        self.pages["zemax"] = manager
-        self.page_stack.addWidget(manager)
+        for software in ("codev", "zemax"):
+            is_codev = software == "codev"
+            manager = QWidget()
+            manager_layout = QVBoxLayout(manager)
+            manager_layout.setContentsMargins(0, 0, 0, 0)
+            manager_layout.setSpacing(12)
+            directory_card = QFrame()
+            directory_card.setProperty("role", "card")
+            directory_layout = QVBoxLayout(directory_card)
+            directory_layout.setContentsMargins(16, 14, 16, 14)
+            directory_layout.addWidget(label("CODE V 安装文件夹" if is_codev else "Zemax Glasscat 文件夹", "section"))
+            directory = QHBoxLayout()
+            root = QLineEdit(self.preferences["codev_root" if is_codev else "zemax_glasscat"])
+            root.setCursorPosition(0)
+            root.setPlaceholderText("选择包含 glass 和 macro 的 CODE V 目录" if is_codev else "选择实际使用的 Glasscat 目录")
+            setattr(self, software + "_root", root)
+            directory.addWidget(root, 1)
+            directory.addWidget(button("选择目录", self.choose_codev_root if is_codev else self.choose_zemax_root, glyph="folder"))
+            directory.addWidget(button("刷新", self.refresh_codev if is_codev else self.refresh_zemax, glyph="reset"))
+            directory_layout.addLayout(directory)
+            note = ("安装与卸载前自动备份，并同步材料与热光两张总表；文件同步后请在 CODE V 中查询确认识别。" if is_codev else
+                    "安装、更新与卸载前自动备份；Zemax 会自行生成 BGF 缓存。安装后在镜头的 Material Catalogs 中加入库名。")
+            manager_note = label(note, "muted")
+            manager_note.setWordWrap(True)
+            directory_layout.addWidget(manager_note)
+            manager_layout.addWidget(directory_card)
+            manager_actions = QHBoxLayout()
+            manager_actions.addWidget(button("安装已有导出包" if is_codev else "安装已有 AGF",
+                                             self.install_codev if is_codev else self.install_zemax_file, glyph="install"))
+            if not is_codev:
+                manager_actions.addWidget(button("从备份恢复", self.restore_zemax, glyph="reset"))
+            manager_actions.addStretch()
+            count = label("", "muted")
+            setattr(self, software + "_count", count)
+            manager_actions.addWidget(count)
+            manager_layout.addLayout(manager_actions)
+            columns = ["玻璃库", "材料数", "数据提示", *([] if is_codev else ["BGF 缓存"]), "文件位置"]
+            table = QTableWidget(0, len(columns))
+            setattr(self, software + "_table", table)
+            table.setHorizontalHeaderLabels(columns)
+            table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            table.setShowGrid(False)
+            table.setWordWrap(False)
+            table.verticalHeader().hide()
+            table.verticalHeader().setDefaultSectionSize(38)
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+            table.horizontalHeader().setSectionResizeMode(len(columns) - 1, QHeaderView.ResizeMode.Stretch)
+            load_selection = self.load_codev_selection if is_codev else self.load_zemax_selection
+            table.itemDoubleClicked.connect(load_selection)
+            manager_layout.addWidget(table, 1)
+            installed_actions = QHBoxLayout()
+            load_button = button("载入到筛选工作区", load_selection, glyph="library")
+            setattr(self, software + "_load_button", load_button)
+            installed_actions.addWidget(load_button)
+            if not is_codev:
+                self.zemax_backup_button = button("备份选中的库", self.backup_zemax_selection, glyph="shield")
+                installed_actions.addWidget(self.zemax_backup_button)
+            installed_actions.addStretch()
+            uninstall_button = button("卸载选中的库", self.uninstall_codev if is_codev else self.uninstall_zemax_selection, glyph="trash")
+            setattr(self, software + "_uninstall_button", uninstall_button)
+            installed_actions.addWidget(uninstall_button)
+            manager_layout.addLayout(installed_actions)
+            table.itemSelectionChanged.connect(self.update_codev_selection if is_codev else self.update_zemax_selection)
+            self.pages[software] = manager
+            self.page_stack.addWidget(manager)
 
         self.output_bar = output_bar = QFrame()
         output_bar.setObjectName("outputBar")
@@ -601,10 +622,11 @@ class GlassCatalogWindow(QMainWindow):
         output_row.setSpacing(12)
         self.output_name_label = label("新库名称", "muted")
         output_row.addWidget(self.output_name_label)
-        self.catalog_name = QLineEdit("CUSTOM")
-        self.catalog_name.setFixedWidth(174)
-        output_row.addWidget(self.catalog_name)
-        output_row.addSpacing(8)
+        self.catalog_name = QLineEdit()
+        self.catalog_name.setMinimumWidth(160)
+        self.catalog_name.setToolTip("自动按来源库、筛选标记和日期命名，可手动修改。玻璃库名以英文字母开头，只用字母、数字、下划线；保存时与文件名同步。")
+        output_row.addWidget(self.catalog_name, 1)
+        output_row.addWidget(button("自动命名", lambda: self.update_catalog_name(force=True), "text"))
         output_row.addWidget(label("导出为", "muted"))
         self.output_format = QComboBox()
         self.output_format.addItem("CODE V XML", "xml")
@@ -612,9 +634,6 @@ class GlassCatalogWindow(QMainWindow):
         self.output_format.addItem("Glass Expert DAT", "dat")
         self.output_format.setFixedWidth(165)
         output_row.addWidget(self.output_format)
-        output_row.addStretch()
-        self.selection_summary = label("当前未选中材料", "muted")
-        output_row.addWidget(self.selection_summary)
         output_layout.addLayout(output_row)
         actions = QHBoxLayout()
         actions.setSpacing(10)
@@ -628,9 +647,10 @@ class GlassCatalogWindow(QMainWindow):
         output_layout.addLayout(actions)
         main.addWidget(output_bar)
         self.output_format.currentIndexChanged.connect(self.update_output_format)
-        self.codev_root.editingFinished.connect(self.save_preferences)
+        self.codev_root.editingFinished.connect(self.update_codev_directory)
         self.zemax_root.editingFinished.connect(self.update_zemax_directory)
         self.update_output_format()
+        self.update_codev_selection()
         self.update_zemax_selection()
         self.show_page("browse")
         if self.supplier_path.text():
@@ -643,11 +663,16 @@ class GlassCatalogWindow(QMainWindow):
         titles = {"browse": (("Glass Expert 候选材料", "选择 CODE V 已安装库，筛选后导出 DAT 清单。") if self.dat_mode else
                              ("玻璃库与筛选", "导入库文件，挑选材料，再导出为新库。")),
                   "settings": ("导出设置", "选择输出格式及对应的安装选项。"),
+                  "codev": ("CODE V 库管理", "查看、载入、安装与卸载本机 CODE V 玻璃库。"),
                   "zemax": ("Zemax 库管理", "查看、安装、备份与卸载本机 Zemax 玻璃库。")}
         self.page_title.setText(titles[key][0])
         self.page_description.setText(titles[key][1])
-        self.output_bar.setVisible(key != "zemax")
-        if key == "zemax":
+        self.output_bar.setVisible(key in {"browse", "settings"})
+        self.clear_button.setVisible(key in {"browse", "settings"})
+        self.format_badge.setVisible(key in {"browse", "settings"})
+        if key == "codev":
+            self.refresh_codev()
+        elif key == "zemax":
             self.refresh_zemax()
 
     def set_output_format(self, value):
@@ -656,7 +681,12 @@ class GlassCatalogWindow(QMainWindow):
     def update_output_format(self):
         fmt = self.output_format.currentData()
         source_changed = self.dat_mode != (fmt == "dat")
+        if source_changed:
+            self.output_names[self.dat_mode] = (self.catalog_name.text(), self.name_suggestion)
         self.dat_mode = fmt == "dat"
+        if source_changed:
+            value, self.name_suggestion = self.output_names[self.dat_mode]
+            self.catalog_name.setText(value)
         self.filter_scroll.setMaximumHeight((80 if self.dat_mode else 140) if self.height() < 720 else 240)
         self.format_buttons[fmt].setChecked(True)
         self.codev_installation.setVisible(fmt in {"xml", "dat"})
@@ -690,6 +720,8 @@ class GlassCatalogWindow(QMainWindow):
             "dat": "从已安装的 CODE V 库选择候选材料，筛选后导出 Catalog / Glass 两列 DAT。"}[fmt])
         if source_changed:
             self.apply_filters()
+        else:
+            self.update_catalog_name()
         if hasattr(self, "current_page"):
             self.show_page(self.current_page)
 
@@ -710,6 +742,8 @@ class GlassCatalogWindow(QMainWindow):
         self.preferences.update(codev_root=self.codev_root.text().strip(),
                                 zemax_glasscat=self.zemax_root.text().strip(),
                                 supplier_table=self.supplier_path.text(), supplier=self.supplier_name.text().strip())
+        self.codev_target_summary.setText(self.preferences["codev_root"] or "尚未选择 CODE V 安装目录")
+        self.zemax_target_summary.setText(self.preferences["zemax_glasscat"] or "尚未选择 Zemax Glasscat 文件夹")
         if codev_changed:
             self.expert_catalogs = []
             if self.dat_mode:
@@ -736,11 +770,32 @@ class GlassCatalogWindow(QMainWindow):
         count = len(self.table.selectionModel().selectedRows())
         self.selection_summary.setText(f"已选中 {count} 种材料" if count else "当前未选中材料")
 
+    def update_catalog_name(self, force=False):
+        catalogs = self.expert_catalogs if self.dat_mode else self.catalogs
+        base = catalogs[0].name if len(catalogs) == 1 else "MIXED" if catalogs else "CUSTOM"
+        base = re.sub(r"[^A-Za-z0-9]+", "_", base).strip("_") or "CUSTOM"
+        if not base[0].isalpha():
+            base = "CATALOG_" + base
+        parts = [base]
+        if self.dat_mode:
+            parts.append("EXPERT")
+        parts.extend(self.active_filters.get("supplier_grade") or [])
+        if any(value is not None and value is not False and value != "" and value != []
+               for key, value in self.active_filters.items()
+               if key not in {"supplier_grade", "transmission_wavelength_nm", "transmission_thickness_mm"}):
+            parts.append("FILTERED")
+        parts.append(datetime.now().strftime("%Y%m%d"))
+        suggestion = "_".join(parts)
+        if force or not self.catalog_name.text().strip() or self.catalog_name.text() == self.name_suggestion:
+            self.catalog_name.setText(suggestion)
+        self.name_suggestion = suggestion
+        return self.catalog_name.text().strip()
+
     def choose_codev_root(self):
         path = QFileDialog.getExistingDirectory(self, "选择 CODE V 安装目录", self.codev_root.text())
         if path:
             self.codev_root.setText(path)
-            self.save_preferences()
+            self.update_codev_directory()
 
     def add_files(self):
         if self.dat_mode:
@@ -798,7 +853,7 @@ class GlassCatalogWindow(QMainWindow):
             paths = installed_catalog_paths(self.codev_root.text().strip())
         except (OSError, ValueError) as exc:
             self.notify("请选择有效的 CODE V 位置", str(exc), "info")
-            self.show_page("settings")
+            self.show_page("codev")
             return
         if not paths:
             self.notify("没有找到已安装的 CODE V XML 库", "请核对 CODE V 安装位置，或先安装材料库。", "info")
@@ -953,6 +1008,7 @@ class GlassCatalogWindow(QMainWindow):
                                           "添加 Zemax AGF 或 CODE V XML，筛选后组合成你的材料库。")
             self.empty_add_button.setVisible(not catalogs)
             self.update_selection_summary()
+            self.update_catalog_name()
             wave = options["transmission_wavelength_nm"]
             thickness = options["transmission_thickness_mm"]
             self.table.horizontalHeaderItem(7).setText(f"内透过率 · {wave:g}nm/{thickness:g}mm" if wave is not None else "内透过率")
@@ -994,12 +1050,20 @@ class GlassCatalogWindow(QMainWindow):
                         "请先导入、筛选或选中材料。", "info")
             return
         extension = "." + self.output_format.currentData()
-        path, _ = QFileDialog.getSaveFileName(self, "保存 Glass Expert DAT 清单" if self.dat_mode else "另存为新玻璃库", self.catalog_name.text() + extension,
-                                             "玻璃库 (*" + extension + ")")
-        if not path:
-            return
+        name = self.update_catalog_name()
+        directory = Path(self.preferences.get("export_directory", str(EXPORT_ROOT)))
         try:
-            report = export_catalog(glasses, path, catalog_name=self.catalog_name.text().strip(),
+            directory.mkdir(parents=True, exist_ok=True)
+            path, _ = QFileDialog.getSaveFileName(self, "保存 Glass Expert DAT 清单" if self.dat_mode else "另存为新玻璃库", str(directory / (name + extension)),
+                                                 "玻璃库 (*" + extension + ")")
+            if not path:
+                return
+            output = Path(path)
+            if not output.suffix:
+                output = output.with_suffix(extension)
+            if output.suffix.lower() != extension:
+                raise CatalogError(f"当前选择 {extension} 格式，请保存为 {extension} 文件")
+            report = export_catalog(glasses, output, catalog_name=output.stem,
                                     prefix_source=self.prefix_source.isChecked() and self.prefix_source.isEnabled(),
                                     transmission_thickness=float(self.thickness.text())
                                     if self.output_format.currentData() == "agf" and self.thickness.text().strip() else None,
@@ -1007,17 +1071,20 @@ class GlassCatalogWindow(QMainWindow):
                                     if self.dat_mode or (self.output_format.currentData() == "xml" and self.include_codev_tables.isChecked()) else None,
                                     selection_info={"input_count": sum(len(c.glasses) for c in (self.expert_catalogs if self.dat_mode else self.catalogs)),
                                                     "filters": self.active_filters, "selected_rows_only": selected_only})
+            self.catalog_name.setText(output.stem)
+            self.preferences["export_directory"] = str(output.parent)
+            self.save_preferences()
             details = f"已导出 {report['count']} 种材料\n{report['output']}\n\n报告：{report['report']}"
             if "codev_bundle" in report:
                 self.last_bundle = report["codev_bundle"]
                 details += (f"\n\nCODE V 完整导出包：{self.last_bundle}\n"
                             "已包含：XML、单库材料目录、CatalogFull.dat、dndt_constants.dat。\n"
-                            "尚未安装；可使用左侧的“安装已有导出包”。")
+                            "尚未安装；可在“CODE V 库管理”中选择“安装已有导出包”。")
             if report["warnings"]:
                 details += "\n\n" + "\n".join(report["warnings"])
             if self.dat_mode:
                 details += "\n\n已核对所选 CODE V 中的库名和牌号。在 Glass Expert 中选择 USER，将此 DAT 指定为 User Catalog。"
-            self.notify(f"已导出 {report['count']} 种材料 · {Path(path).name}", details)
+            self.notify(f"已导出 {report['count']} 种材料 · {output.name}", details)
         except (OSError, ValueError, ET.ParseError) as exc:
             self.notify("未完成导出", str(exc), "error")
 
@@ -1027,7 +1094,8 @@ class GlassCatalogWindow(QMainWindow):
         if not path:
             return
         try:
-            result = install_bundle(path)
+            result = codev.apply(path, self.codev_root.text().strip())
+            self.refresh_codev()
             details = (f"已安装 {result['catalog']}，共 {result['count']} 种材料。\n"
                        f"XML、单库材料目录及两张总表均已同步。\n\n备份：{result['backup']}\n\n"
                        "请在 CODE V 中查询新库，确认软件识别。")
@@ -1049,12 +1117,14 @@ class GlassCatalogWindow(QMainWindow):
         if not glasses:
             self.notify("没有可安装的材料", "请先导入、筛选或选中材料。", "info")
             return
-        name = self.catalog_name.text().strip()
-        output = EXPORT_ROOT / ("install_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f")) / (name + "." + fmt)
+        name = self.update_catalog_name()
+        target = "CODEV" if fmt == "xml" else "ZEMAX"
+        output = EXPORT_ROOT / (name + "_安装到" + target + "_" + datetime.now().strftime("%H%M%S_%f")) / (name + "." + fmt)
         try:
             report = export_catalog(glasses, output, catalog_name=name, prefix_source=self.prefix_source.isChecked(),
                                     transmission_thickness=float(self.thickness.text()) if fmt == "agf" and self.thickness.text().strip() else None,
                                     codev_root=self.codev_root.text().strip() if fmt == "xml" else None,
+                                    bundle_dir=output.parent / "CODEV安装包" if fmt == "xml" else None,
                                     install_codev=fmt == "xml",
                                     selection_info={"input_count": sum(len(c.glasses) for c in self.catalogs),
                                                     "filters": self.active_filters,
@@ -1071,6 +1141,7 @@ class GlassCatalogWindow(QMainWindow):
                 self.refresh_zemax()
                 return
             self.last_bundle = report["codev_bundle"]
+            self.refresh_codev()
             details = (f"已将 {report['catalog']} 库的 {report['count']} 种材料安装到：\n{self.codev_root.text()}\n\n"
                        "玻璃库、材料目录和热光目录已同步，文件核对通过。\n"
                        f"备份：{report['codev_installation']['backup']}\n导出与报告：{output.parent}\n\n"
@@ -1081,51 +1152,72 @@ class GlassCatalogWindow(QMainWindow):
             self.notify("未完成安装", str(exc), "error")
 
     def uninstall_codev(self):
-        codev_root = self.codev_root.text().strip()
-        names = sorted(p.stem for p in (Path(codev_root) / "glass").glob("*.xml"))
-        if not names:
-            self.notify("没有找到已安装的 CODE V 库", "请在导出设置中核对安装目录。", "info")
+        catalog = self.selected_codev_catalog()
+        if catalog is None:
             return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("卸载 CODE V 玻璃库")
-        dialog.setMinimumWidth(480)
-        body = QVBoxLayout(dialog)
-        body.setContentsMargins(25, 23, 25, 23)
-        body.setSpacing(15)
-        body.addWidget(label("卸载玻璃库", "section"))
-        body.addWidget(label(f"CODE V：{codev_root}", "muted"))
-        body.addWidget(label("选择要移除的库，自动备份并同步清理材料与热光目录。", "description"))
-        choice = QComboBox()
-        choice.setObjectName("catalogChoice")
-        choice.setPlaceholderText("选择已安装的玻璃库")
-        choice.addItems(names)
-        choice.setCurrentIndex(-1)
-        body.addWidget(choice)
-        actions = QHBoxLayout()
-        actions.addStretch()
-        actions.addWidget(button("取消", dialog.reject))
-        remove_button = button("卸载选中的库", role="primary", glyph="trash")
-        remove_button.setObjectName("uninstallSelected")
-        remove_button.setEnabled(False)
-        choice.currentIndexChanged.connect(lambda index: remove_button.setEnabled(index >= 0))
-        actions.addWidget(remove_button)
-        body.addLayout(actions)
+        try:
+            result = codev.uninstall(catalog["catalog"], self.codev_root.text().strip())
+            self.refresh_codev()
+            self.notify(f"已卸载 CODE V 库 · {result['catalog']}" if result["ok"] else "卸载核对未通过",
+                        (f"已移除 {result['count']} 种材料及两张总表中的对应记录。\n备份：{result['backup']}\n"
+                         "请在 CODE V 中确认该库已移除。") if result["ok"] else str(result),
+                        "success" if result["ok"] else "error")
+        except (OSError, ValueError, ET.ParseError) as exc:
+            self.notify("未完成卸载", str(exc), "error")
 
-        def remove():
-            try:
-                result = uninstall_catalog(choice.currentText(), codev_root)
-                self.notify(f"已卸载 CODE V 库 · {result['catalog']}" if result["ok"] else "卸载核对未通过",
-                            (f"已移除 {result['count']} 种材料及两张总表中的对应记录。\n备份：{result['backup']}\n"
-                             "请在 CODE V 中确认该库已移除。") if result["ok"] else str(result),
-                            "success" if result["ok"] else "error")
-                dialog.accept()
-            except (OSError, ValueError, ET.ParseError) as exc:
-                dialog.reject()
-                self.notify("未完成卸载", str(exc), "error")
+    def update_codev_directory(self):
+        self.save_preferences()
+        self.refresh_codev()
 
-        remove_button.clicked.connect(remove)
-        dialog.open()
-        return dialog
+    def refresh_codev(self):
+        root = self.codev_root.text().strip()
+        if not root:
+            self.codev_catalogs = []
+            self.codev_table.setRowCount(0)
+            self.codev_count.setText("请先选择 CODE V 安装文件夹")
+            self.update_codev_selection()
+            return False
+        try:
+            result = codev.list_catalogs(root)
+            self.codev_catalogs = result["catalogs"]
+            self.codev_table.setRowCount(len(self.codev_catalogs))
+            for row, catalog in enumerate(self.codev_catalogs):
+                values = (catalog["catalog"], "—" if catalog["count"] is None else str(catalog["count"]),
+                          catalog.get("error") or str(catalog["issues"]), catalog["path"])
+                for column, value in enumerate(values):
+                    item = QTableWidgetItem(value)
+                    item.setToolTip(value)
+                    self.codev_table.setItem(row, column, item)
+            self.codev_count.setText(f"{result['count']} 个玻璃库" if result["exists"] else "未找到 glass 文件夹，请核对安装位置")
+            self.update_codev_selection()
+            return True
+        except OSError as exc:
+            self.notify("无法读取 CODE V 目录", str(exc), "error")
+            return False
+
+    def update_codev_selection(self):
+        catalog = self.selected_codev_catalog()
+        self.codev_load_button.setEnabled(catalog is not None and catalog["count"] is not None)
+        self.codev_uninstall_button.setEnabled(catalog is not None)
+
+    def selected_codev_catalog(self):
+        rows = self.codev_table.selectionModel().selectedRows()
+        return self.codev_catalogs[rows[0].row()] if rows else None
+
+    def load_codev_selection(self):
+        catalog = self.selected_codev_catalog()
+        if catalog is None:
+            return
+        try:
+            source = load_catalog(catalog["path"])
+            catalogs = self.expert_catalogs if self.dat_mode else self.catalogs
+            if not any(item.source.casefold() == source.source.casefold() for item in catalogs):
+                catalogs.append(source)
+            self.reset_filters()
+            self.show_page("browse")
+            self.notify(f"已载入 CODE V 库 · {source.name}", f"{len(source.glasses)} 种材料；可继续筛选和导出。")
+        except (OSError, ValueError, ET.ParseError) as exc:
+            self.notify("无法载入 CODE V 库", str(exc), "error")
 
     def choose_zemax_root(self):
         path = QFileDialog.getExistingDirectory(self, "选择 Zemax 实际使用的 Glasscat 文件夹", self.zemax_root.text())
@@ -1177,6 +1269,8 @@ class GlassCatalogWindow(QMainWindow):
             return
         try:
             source = load_catalog(catalog["path"])
+            if self.dat_mode:
+                self.set_output_format("agf")
             if not any(item.source.casefold() == source.source.casefold() for item in self.catalogs):
                 self.catalogs.append(source)
             self.reset_filters()

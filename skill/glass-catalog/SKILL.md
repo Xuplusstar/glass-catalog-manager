@@ -23,7 +23,7 @@ description: Zemax AGF 与 CODE V XML 双向转换、厂家表 MA/A/B/C/D 匹配
 
 1. 先对用户输入运行 `python -X utf8 <入口> inspect <文件...> --json`，核对来源、数量、公式、有效波段和 `issues`。AGF 与 XML 是完整材料输入；任意 DAT 宏表不能作为完整玻璃库反向还原。
 2. 将用户条件传给 `inspect` / `convert`。`--names` 精确名单，`--name` 名称包含；nd / Vd / 密度含边界。原生供应状态用 `--supply-status agf:0 agf:1`（Zemax 标准/优选）或 `codev:10 codev:11`（CODE V 最高/较高熔炼频率），多选为 OR；查看 `supply_label`、`supply_status`，不用近似 AGF status 解释 XML。AGF 独立熔炼频率用 `--melt-frequency 1 2 3`；厂家 MA/A/B/C/D 与软件数值不保证可逆，按 [状态与数据边界](references/usage.md) 核对。内透过率用 `--it-at-nm 550 --it-thickness-mm 10 --it-min 95`（百分数）；无覆盖数据则不入选。波长范围内线性插值，厚度按 Beer–Lambert 换算，不含表面反射、不外推；多个实测厚度选最接近目标比例且覆盖波长的曲线。`inspect` 返回计算值与方法，转换报告保存条件。跨库同名用来源区分或用户接受的前缀，不自行丢记录。
-3. 用 `convert <文件...> --output <新库.AGF或.xml> --json` 导出。CODE V 默认加 `--codev-root <config中的安装目录>`，一次生成 XML、单库 DAT、`CatalogFull.dat`、`dndt_constants.dat` 及报告；用户明确只要 XML 时可省略。复读输出，核对材料数量、目录包 `table_changes` 与名称映射，交付完整包和报告。导出不会安装到软件目录。
+3. 用 `convert <文件...> --output <新库.AGF或.xml> --json` 导出。未指定名字时按“来源库_筛选标记_日期”取英文名，例如 `CDGM_MA_A_B_20261030`；多来源可用 `MIXED`，其他筛选可用 `FILTERED`，DAT 加 `EXPERT`。优先沿用用户指定的名称，文件名与库内名称保持一致；省略 `--catalog-name` 时核心直接采用文件名。CODE V 默认加 `--codev-root <config中的安装目录>`，一次生成 XML、单库 DAT、`CatalogFull.dat`、`dndt_constants.dat` 及报告；用户明确只要 XML 时可省略。复读输出，核对材料数量、目录包 `table_changes` 与名称映射，交付完整包和报告。导出不会安装到软件目录。
 
 跨格式当前覆盖公式 1 / 2 / 3 及等价六系数模型。暂不支持的模型和异常光学记录会明确失败；`--convertible-only` 仅在用户接受排除这些材料时使用，并报告排除数量。原生格式筛选保留原始记录。
 
@@ -31,7 +31,7 @@ AGF 内透过率 `1 < IT ≤ 1.001` 默认自动按 100% 导出 XML，并逐点�
 
 CODE V → Zemax 时读 [references/codev-to-zemax.md](references/codev-to-zemax.md)。多厚度透过率需明确 `--transmission-thickness <mm>`，可用 inspect 的 `transmission_thicknesses_mm` 查看选项。色散、热学和附加字段转换的实际边界在工具根目录 `README.md`，改变转换规则或遇到相关提示时读取该处。报告里的损失项应随结果说明。
 
-常用参数见 [references/usage.md](references/usage.md)。人工版用 `gui`、工具的 `打开玻璃库管理.bat`，或分享包的 `GlassCatalog.exe`。窗口选择 XML / AGF / DAT 时，设置与主操作同步改变；DAT 点击“选择已安装库”后筛选导出，与 AGF/XML 各自保留材料来源；“Zemax 库管理”提供已安装库浏览、载入、安装、备份、卸载与恢复。操作结果为无声页内提示，路径与报告可展开。人工版与 AI 同一核心；更新后重开旧窗口。
+常用参数见 [references/usage.md](references/usage.md)。人工版用 `gui`、工具的 `打开玻璃库管理.bat`，或分享包的 `GlassCatalog.exe`。侧栏“玻璃库管理”下 CODE V、Zemax 相邻同级，均在顶部选安装位置、中间列出库、底部操作选中库；导出设置显示目标并提供跳转。CODE V 可浏览、载入、安装完整包与卸载；Zemax 另提供独立备份与恢复。窗口自动建议库名，手工修改后不随筛选覆盖，保存窗口改文件名会同步库内名称。DAT 与 AGF/XML 各自保留名称和材料来源；DAT 点击“选择已安装库”后筛选导出。操作结果为无声页内提示，路径与报告可展开。人工版与 AI 同一核心；更新后重开旧窗口。
 
 用户要求按厂家 MA/A/B/C/D 选材时，加载其提供的 CSV/TSV/XLSX：`--supplier-table <表> --supplier <厂家> --supplier-grade MA A B`。已知厂家如 CDGM 可从表文件名识别；按厂家库名前缀及牌号匹配，仅忽略空格、连字符和大小写，不做近似猜测。先 inspect 核对 `supplier_table` 的版本、匹配数和 `supplier_grade`，再转换；未匹配材料不进入字母筛选结果。结果报告 `supplier_data` 保留来源、SHA256、版本及牌号分级，不改原库软件状态或光学数据。库名无法识别厂家或需跨版本对应时，按 [厂家表规则](references/usage.md) 处理。
 
@@ -46,6 +46,8 @@ CODE V → Zemax 时读 [references/codev-to-zemax.md](references/codev-to-zemax
 用户要求导入、安装、更新或卸载 CODE V 库时，必须读 [references/codev-install.md](references/codev-install.md) 并完成文件处理和软件查询验证。已获授权的同一范围直接执行；只有转换文件、开发功能或编写 skill 的请求，不等于实际安装或卸载某个库。
 
 **XML 对应的两个总表都要同步：`macro/CatalogFull.dat` 和 `macro/dndt_constants.dat`。** `convert --codev-root` 或已有 XML 的 `codev prepare` 生成保留其他厂家的合并包；`codev apply` 备份后写入 XML、单库 DAT 和两张合并总表；`codev verify` 核对文件。
+
+查看已安装库用 `codev list --codev-root <目标目录> --json`，返回每个 XML 的位置、材料数量与提示；个别坏文件单独返回 error，不隐藏其他库。列表只读。
 
 用户要求直接安装新转换结果时，`convert ... --codev-root <目标目录> --install-codev --json` 一次完成，核对 `codev_installation` 的文件状态及备份。卸载使用 `codev uninstall <库名> --codev-root <目标目录> --json`，备份后删除库文件和两张当前总表中的该库行；保留其他库，不用安装前的旧整表覆盖当前总表。
 

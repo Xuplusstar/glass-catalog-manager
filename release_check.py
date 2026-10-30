@@ -21,7 +21,7 @@ def run(report_path):
         from glass_catalog_ui import GlassCatalogWindow
         import glass_catalog_ui as ui
         import zemax_catalog_manager as zm
-        from codev_catalog_bundle import verify, uninstall
+        from codev_catalog_bundle import verify
         app = QApplication.instance() or QApplication([])
         app.setStyle("windows11")
         for name in ("msyh.ttc", "msyhl.ttc", "segoeui.ttf"):
@@ -67,6 +67,12 @@ def run(report_path):
             w.clear_supplier_table()
             assert len(w.filtered) == 2 and w.table.item(0, 9).text() == "—"
             result["checks"].append("厂家表读取、字母筛选、来源报告与清除")
+            w.update_catalog_name(force=True)
+            assert w.catalog_name.text().startswith("CDGM202509_FILTERED_")
+            w.catalog_name.setText("RUNTIME")
+            w.apply_filters()
+            assert w.catalog_name.text() == "RUNTIME"
+            result["checks"].append("来源与条件自动命名、手工名称保留")
             for fmt, target in (("xml", "CODE V"), ("agf", "Zemax")):
                 w.set_output_format(fmt)
                 assert target in w.install_button.text()
@@ -90,6 +96,7 @@ def run(report_path):
             result["checks"].append("CODE V 原生供应状态与 Zemax 独立熔炼频率")
             w.set_output_format("dat")
             assert not w.filtered and w.install_button.isHidden()
+            assert "EXPERT" in w.catalog_name.text()
             dialog = w.choose_expert_catalogs()
             choices = dialog.findChild(QTableWidget, "expertCatalogChoices")
             assert choices.rowCount() == 1
@@ -106,6 +113,7 @@ def run(report_path):
                 QFileDialog.getSaveFileName = original_picker
             assert w.last_notice["level"] == "success", w.last_notice
             assert output.read_bytes().startswith(b"Catalog\tGlass\r\nRUNTIME\tTEST")
+            assert w.catalog_name.text() == "CANDIDATES"
             assert not output.with_suffix(".xml").exists()
             assert json.loads(output.with_suffix(".dat.report.json").read_text(encoding="utf-8"))["reference_verification"]["checked"]
             assert all(p.read_bytes() == value for p, value in originals.items())
@@ -122,6 +130,8 @@ def run(report_path):
             w.show_page("zemax")
             assert w.zemax_table.rowCount() == 1
             w.zemax_table.selectRow(0)
+            app.processEvents()
+            assert w.grab().save(str(Path(report_path).with_name(Path(report_path).stem + "_Zemax.png")))
             w.backup_zemax_selection()
             backup = w.last_notice["details"]
             w.uninstall_zemax_selection()
@@ -129,17 +139,29 @@ def run(report_path):
             zm.restore(backup, work / "Glasscat")
             assert zm.list_catalogs(work / "Glasscat")["count"] == 1
             result["checks"].append("Zemax 管理备份、卸载与恢复")
-            uninstall("RUNTIME", codev)
+            w.show_page("codev")
+            assert w.codev_table.rowCount() == 1 and w.output_bar.isHidden()
+            w.codev_table.selectRow(0)
+            app.processEvents()
+            assert w.grab().save(str(Path(report_path).with_name(Path(report_path).stem + "_CODEV.png")))
+            w.codev_load_button.click()
+            assert w.current_page == "browse" and w.dat_mode
+            w.show_page("codev")
+            w.codev_table.selectRow(0)
+            w.codev_uninstall_button.click()
+            assert w.last_notice["level"] == "success", w.last_notice
+            assert w.codev_table.rowCount() == 0
             assert all((codev / "macro" / name).read_bytes() == value for name, value in original_tables.items())
-            result["checks"].append("CODE V 卸载后两张总表恢复原内容")
+            result["checks"].append("CODE V 管理页列出、载入与卸载后两张总表保持原内容")
             w.show_page("browse")
             w.set_output_format("agf")
+            assert w.catalog_name.text() == "RUNTIME"
             w.resize(1000, 650)
             w.show()
             w.filter_button.setChecked(True)
             w.notify("独立程序运行检查通过", "所有安装卸载都在临时目录中执行。")
             app.processEvents()
-            for widget in (w.install_button, w.export_button, w.uninstall_button):
+            for widget in (w.install_button, w.export_button, w.nav_buttons["codev"], w.nav_buttons["zemax"]):
                 assert w.rect().contains(QRect(widget.mapTo(w, QPoint()), widget.size()))
             assert w.table.viewport().height() > 40
             assert w.notice.isVisible() and not w.notice_details.isVisible()
