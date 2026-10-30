@@ -7,9 +7,14 @@ from importlib import metadata
 import json
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import sys
 import zipfile
+
+from PySide6.QtCore import QBuffer, QIODevice
+from PySide6.QtGui import QImage, QPainter
+from PySide6.QtSvg import QSvgRenderer
 
 from app_settings import VERSION
 
@@ -29,7 +34,27 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "release")
     args = parser.parse_args()
     release_name = f"GlassCatalog-{VERSION}-Windows-x64"
-    destination = args.output.resolve() / release_name
+    destination = args.output.resolve() / "GlassCatalog"
+    # PNG frames in a Windows ICO keep the small shortcut sizes crisp at each display scale.
+    renderer = QSvgRenderer(str(ROOT / "assets/app.svg"))
+    sizes = (16, 20, 24, 32, 40, 48, 64, 128, 256)
+    entries, frames = [], []
+    offset = 6 + 16 * len(sizes)
+    for size in sizes:
+        frame = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+        frame.fill(0)
+        painter = QPainter(frame)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        renderer.render(painter)
+        painter.end()
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        frame.save(buffer, "PNG")
+        png = bytes(buffer.data())
+        entries.append(struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(png), offset))
+        frames.append(png)
+        offset += len(png)
+    (ROOT / "assets/app.ico").write_bytes(struct.pack("<HHH", 0, 1, len(sizes)) + b"".join(entries) + b"".join(frames))
     build = ROOT / "build"
     build.mkdir(exist_ok=True)
     log_path = build / "build-release.log"
@@ -38,7 +63,7 @@ def main():
                   "--distpath", str(args.output.resolve()), "--specpath", str(build),
                   "--workpath", str(build / "pyinstaller")]
         commands = [
-            [*common, "--name", release_name, "--windowed", "--onedir",
+            [*common, "--name", "GlassCatalog", "--windowed", "--onedir",
              "--icon", str(ROOT / "assets/app.ico"),
              "--add-data", f"{ROOT / 'glass_catalog_ui.qss'};.",
              "--add-data", f"{ROOT / 'assets'};assets", str(ROOT / "glass_catalog_gui.py")],
@@ -51,7 +76,6 @@ def main():
             print("构建：" + command[command.index("--name") + 1], flush=True)
             subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True,
                            creationflags=subprocess.CREATE_NO_WINDOW)
-    (destination / (release_name + ".exe")).replace(destination / "GlassCatalog.exe")
     engine = destination / "source"
     engine.mkdir(exist_ok=True)
     for filename in SOURCE_FILES:
@@ -95,11 +119,11 @@ def main():
     manifest = {"version": VERSION, "platform": "Windows x64", "created": datetime.now().isoformat(),
                 "python": sys.version, "files": files}
     (destination / "release-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    archive = destination.with_name(destination.name + ".zip")
+    archive = args.output.resolve() / (release_name + ".zip")
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as output:
         for path in destination.rglob("*"):
             if path.is_file():
-                output.write(path, release_name + "/" + path.relative_to(destination).as_posix())
+                output.write(path, destination.name + "/" + path.relative_to(destination).as_posix())
     print(json.dumps({"ok": True, "folder": str(destination), "zip": str(archive),
                       "zip_bytes": archive.stat().st_size, "build_log": str(log_path)}, ensure_ascii=False), flush=True)
 

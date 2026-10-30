@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
-if exist "%~dp0release\GlassCatalog-1.3.0-Windows-x64\GlassCatalog.exe" (
-    start "" "%~dp0release\GlassCatalog-1.3.0-Windows-x64\GlassCatalog.exe"
+if exist "%~dp0release\GlassCatalog\GlassCatalog.exe" (
+    start "" "%~dp0release\GlassCatalog\GlassCatalog.exe"
     exit /b 0
 )
 python -X utf8 glass_catalog_gui.py

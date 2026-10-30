@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import sys
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 USER_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "GlassCatalog"
 SETTINGS_FILE = USER_DIR / "settings.json"

@@ -141,7 +141,7 @@ class GlassCatalogWindow(QMainWindow):
         self.name_suggestion = ""
         self.output_names = {False: ("", ""), True: ("", "")}
         self.setWindowTitle(f"玻璃库管理 · Zemax / CODE V · {VERSION}")
-        self.setWindowIcon(icon("glass", "#454751", 32))
+        self.setWindowIcon(QIcon(str(Path(__file__).resolve().parent / "assets/app.ico")))
         self.resize(1180, 800)
         self.setMinimumSize(1000, 650)
         stylesheet = Path(__file__).with_suffix(".qss").read_text(encoding="utf-8")
@@ -163,7 +163,7 @@ class GlassCatalogWindow(QMainWindow):
         brand.setContentsMargins(10, 0, 4, 0)
         brand.setSpacing(11)
         mark = QLabel()
-        mark.setPixmap(icon("glass", "#3D4049", 30).pixmap(QSize(30, 30)))
+        mark.setPixmap(self.windowIcon().pixmap(QSize(34, 34)))
         brand.addWidget(mark)
         brand_text = QVBoxLayout()
         brand_text.setSpacing(3)
@@ -1330,7 +1330,12 @@ class GlassCatalogWindow(QMainWindow):
 
 
 def main():
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Xuplusstar.GlassCatalogManager")
     app = QApplication(sys.argv)
+    app.setApplicationName("GlassCatalog")
+    app.setApplicationDisplayName("玻璃库管理")
     app.setStyle("windows11")
     app.setFont(QFont("Microsoft YaHei UI", 10))
     window = GlassCatalogWindow()

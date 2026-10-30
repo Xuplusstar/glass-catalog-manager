@@ -1,4 +1,4 @@
-# Zemax / CODE V 玻璃库管理 1.3.0
+# Zemax / CODE V 玻璃库管理 1.3.1
 
 同一个转换核心供人工窗口、AI skill 和独立命令行使用。支持 AGF ↔ CODE V XML、筛选组合建库、两边的材料库管理和 CODE V Glass Expert DAT 候选清单。无需 MATLAB。
 
@@ -6,7 +6,11 @@
 
 ## 人工使用与分享
 
-从 [GitHub Releases](https://github.com/Xuplusstar/glass-catalog-manager/releases) 下载 GlassCatalog-1.3.0-Windows-x64.zip，或使用本机构建的 release/ 中同名 ZIP。解压完整文件夹后双击 GlassCatalog.exe，不需要另装 Python。适用 Windows 10 / 11 x64。开发期间本机仍可双击“打开玻璃库管理.bat”，优先打开最新版打包程序，否则使用源码环境。
+从 [GitHub Releases](https://github.com/Xuplusstar/glass-catalog-manager/releases) 下载 GlassCatalog-1.3.1-Windows-x64.zip，或使用本机构建的 release/ 中同名 ZIP。解压后进入 GlassCatalog 文件夹，双击 GlassCatalog.exe，不需要另装 Python。适用 Windows 10 / 11 x64。开发期间本机仍可双击“打开玻璃库管理.bat”，优先打开最新版打包程序，否则使用源码环境。
+
+程序目录固定为 GlassCatalog，ZIP 文件名标注版本。可对 GlassCatalog.exe 创建桌面或开始菜单快捷方式，直接打开软件。以后更新时先退出程序，再将新版 GlassCatalog 解压到相同位置替换文件，原快捷方式继续可用；不移动程序文件夹。旧版带版本号的解压目录首次迁移后需重新创建一次快捷方式。本机构建的固定入口为 release/GlassCatalog/GlassCatalog.exe。
+
+应用采用统一的蓝色光学玻璃叠层图标，覆盖 EXE、窗口和侧栏；ICO 包含 16～256 像素的多尺寸图像，适配 Windows 显示缩放。源码 SVG 位于 assets/app.svg，构建时生成 app.ico。
 
 完整包保留 _internal、GlassCatalog.exe、GlassCatalogCLI.exe 和 skill/glass-catalog 的相对位置。不要只发主 EXE。包不包含用户的玻璃库、软件总表、镜头或个人设置。详细操作见[使用说明.txt](使用说明.txt)。
 
@@ -168,7 +172,7 @@ python -m venv .build-venv
 $env:QT_QPA_PLATFORM='offscreen'
 python -X utf8 -m unittest discover -s tests -v
 GlassCatalog.exe --self-check <验证报告.json>
-python -X utf8 verify_release.py release/GlassCatalog-1.3.0-Windows-x64.zip --report build/verification.json
+python -X utf8 verify_release.py release/GlassCatalog-1.3.1-Windows-x64.zip --report build/verification.json
 ~~~
 
 独立程序自检使用合成材料和临时软件目录，核对打包后模块、样式资源、筛选与各文件流程，不打开或操控桌面。真实 Zemax / CODE V 中的导入识别及热学语义验收尚未完成；不将本版称为全公式 / 全属性无损转换器。
