@@ -165,3 +165,9 @@ python -X utf8 verify_release.py release/GlassCatalog-1.2.0-Windows-x64.zip --re
 ~~~
 
 独立程序自检使用合成材料和临时软件目录，核对打包后模块、样式资源、筛选与各文件流程，不打开或操控桌面。真实 Zemax / CODE V 中的导入识别及热学语义验收尚未完成；不将本版称为全公式 / 全属性无损转换器。
+
+## 许可证
+
+本项目自有源码、文档及配套 AI skill 采用 [MIT 许可证](LICENSE)，允许使用、修改、商业使用和再分发；再分发时保留版权声明与许可证。软件按许可证中的“按现状”条款提供。
+
+Python、Qt/PySide6、Shiboken6、PyInstaller 等依赖保留各自许可证，分享包的 licenses/ 中附相关文本。MIT 许可不授予第三方玻璃库、厂家表或 Zemax/CODE V 软件的权利。

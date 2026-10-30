@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent
 SOURCE_FILES = ["glass_catalog.py", "glass_catalog_gui.py", "glass_catalog_ui.py", "glass_catalog_ui.qss",
                 "codev_catalog_bundle.py", "zemax_catalog_manager.py", "glass_expert.py", "supplier_catalog.py", "app_settings.py",
                 "cli_entry.py", "release_check.py", "verify_release.py", "requirements-gui.txt", "requirements-build.txt",
-                "build_release.py", "README.md", "使用说明.txt", "AGENTS.md"]
+                "build_release.py", "README.md", "使用说明.txt", "AGENTS.md", "LICENSE"]
 
 
 def main():
@@ -66,6 +66,7 @@ def main():
     (skill / "config.json").write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
     shutil.copy2(ROOT / "使用说明.txt", destination / "先读我-使用说明.txt")
     shutil.copy2(ROOT / "README.md", destination / "详细说明.md")
+    shutil.copy2(ROOT / "LICENSE", destination / "LICENSE")
     licenses = destination / "licenses"
     licenses.mkdir(exist_ok=True)
     python_license = Path(sys.base_prefix) / "LICENSE_PYTHON.txt"
@@ -82,6 +83,7 @@ def main():
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(source, target)
     (licenses / "THIRD_PARTY.txt").write_text(
+        "Application source: MIT (see ../LICENSE). Dependencies retain their own licenses.\n"
         "Python: https://www.python.org/ (PSF License)\n"
         "Qt / PySide6 / Shiboken6 6.9.2: https://code.qt.io/pyside/pyside-setup.git/tag/?h=v6.9.2 (LGPLv3 / GPLv3)\n"
         "Qt sources: https://download.qt.io/archive/qt/6.9/6.9.2/single/\n"

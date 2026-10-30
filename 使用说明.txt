@@ -70,3 +70,7 @@ Zemax 备份：所选 Glasscat\catalog_backups；CODE V 备份位置在结果详
 实际示例可直接选择 Zemax 实际使用的 Glasscat 中的 AGF，或 CODE V 安装目录 glass 中的 XML。
 本机项目 examples 中保留从这两个位置复制的原文件，另有来源说明；旧试验输出不作为新的示例。
 分享包和公开仓库不附厂家玻璃库。测试采用合成材料，运行自检不会修改你的软件安装目录。
+
+九、许可证
+本项目自有源码、文档和 AI skill 采用 MIT 许可证，允许使用、修改、商业使用及再分发；再分发时保留版权声明和 LICENSE。
+Python、Qt/PySide6 等依赖使用各自许可证，见 licenses 文件夹。第三方玻璃库、厂家表和 Zemax/CODE V 软件不属于本项目的 MIT 授权范围。
