@@ -58,10 +58,17 @@ def main():
     build = ROOT / "build"
     build.mkdir(exist_ok=True)
     log_path = build / "build-release.log"
+    # Collect the two Python runtime DLLs missed by a venv based on Conda.
+    runtime_bin = Path(sys.base_prefix) / "Library/bin"
+    runtime_binaries = []
+    for filename in ("ffi.dll", "libmpdec-4.dll"):
+        dll = runtime_bin / filename
+        if dll.is_file():
+            runtime_binaries.extend(["--add-binary", f"{dll};."])
     with log_path.open("w", encoding="utf-8") as log:
         common = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--noupx",
                   "--distpath", str(args.output.resolve()), "--specpath", str(build),
-                  "--workpath", str(build / "pyinstaller")]
+                  "--workpath", str(build / "pyinstaller"), *runtime_binaries]
         commands = [
             [*common, "--name", "GlassCatalog", "--windowed", "--onedir",
              "--icon", str(ROOT / "assets/app.ico"),
@@ -76,11 +83,16 @@ def main():
             print("构建：" + command[command.index("--name") + 1], flush=True)
             subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True,
                            creationflags=subprocess.CREATE_NO_WINDOW)
+    missing = [line for line in log_path.read_text(encoding="utf-8").splitlines()
+               if "WARNING: Library not found:" in line]
+    if missing:
+        raise RuntimeError("构建缺少运行依赖：\n" + "\n".join(missing))
     engine = destination / "source"
     engine.mkdir(exist_ok=True)
     for filename in SOURCE_FILES:
         shutil.copy2(ROOT / filename, engine / filename)
     shutil.copytree(ROOT / "assets", engine / "assets", dirs_exist_ok=True)
+    shutil.copytree(ROOT / "licenses", engine / "licenses", dirs_exist_ok=True)
     shutil.copytree(ROOT / "tests", engine / "tests", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__"))
     skill = destination / "skill/glass-catalog"
@@ -93,6 +105,7 @@ def main():
     shutil.copy2(ROOT / "LICENSE", destination / "LICENSE")
     licenses = destination / "licenses"
     licenses.mkdir(exist_ok=True)
+    shutil.copytree(ROOT / "licenses", licenses, dirs_exist_ok=True)
     python_license = Path(sys.base_prefix) / "LICENSE_PYTHON.txt"
     if not python_license.is_file():
         python_license = Path(sys.base_prefix) / "LICENSE.txt"
@@ -109,6 +122,7 @@ def main():
     (licenses / "THIRD_PARTY.txt").write_text(
         "Application source: MIT (see ../LICENSE). Dependencies retain their own licenses.\n"
         "Python: https://www.python.org/ (PSF License)\n"
+        "libffi: MIT (see libffi.txt); libmpdec: BSD (see libmpdec.txt).\n"
         "Qt / PySide6 / Shiboken6 6.9.2: https://code.qt.io/pyside/pyside-setup.git/tag/?h=v6.9.2 (LGPLv3 / GPLv3)\n"
         "Qt sources: https://download.qt.io/archive/qt/6.9/6.9.2/single/\n"
         "PyInstaller: https://pyinstaller.org/ (GPL with bootloader exception)\n"

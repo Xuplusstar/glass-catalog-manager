@@ -54,6 +54,18 @@ def main():
         args.report.with_name(args.report.stem + "_DAT_small.png").write_bytes(gui_report.with_name(gui_report.stem + "_DAT_small.png").read_bytes())
         for page in ("CODEV", "Zemax", "Sources"):
             args.report.with_name(args.report.stem + "_" + page + ".png").write_bytes(gui_report.with_name(gui_report.stem + "_" + page + ".png").read_bytes())
+        ffi = next((package / "_internal").glob("*ffi*.dll"), None)
+        if ffi is not None:
+            disabled = ffi.with_suffix(".disabled")
+            ffi.rename(disabled)
+            missing_report = work / "missing-ffi.json"
+            missing = subprocess.run([str(package / "GlassCatalog.exe"), "--self-check", str(missing_report)],
+                                     env=env, cwd=work, capture_output=True, timeout=30,
+                                     creationflags=subprocess.CREATE_NO_WINDOW)
+            failure = json.loads(missing_report.read_text(encoding="utf-8"))
+            assert missing.returncode == 2 and not failure["ok"] and "_ctypes" in failure["error"], failure
+            disabled.rename(ffi)
+            result["checks"].append({"check": "移除ffi依赖时启动自检准确返回失败", "ok": True})
         record = "NM TEST 1 0 1.5 50 0 0 1\nCD 2.25 0 .008 0 0 0\nLD .3 2.5\nIT .5 .8 5\nIT .6 1 5\n"
         source = work / "CDGM202509.AGF"
         source.write_text(record, encoding="utf-8")

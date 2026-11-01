@@ -1,4 +1,4 @@
-玻璃库管理 1.3.2 · Zemax / CODE V
+玻璃库管理 1.3.3 · Zemax / CODE V
 
 一、打开与分享
 分享版：先解压整个 ZIP，进入 GlassCatalog 文件夹，再双击 GlassCatalog.exe。保留同目录的 _internal 文件夹。

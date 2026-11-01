@@ -1364,15 +1364,20 @@ class GlassCatalogWindow(QMainWindow):
             self.notify("未完成 Zemax 库恢复", str(exc), "error")
 
 
-def main():
+def create_application():
     if sys.platform == "win32":
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Xuplusstar.GlassCatalogManager")
-    app = QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("GlassCatalog")
     app.setApplicationDisplayName("玻璃库管理")
     app.setStyle("windows11")
     app.setFont(QFont("Microsoft YaHei UI", 10))
+    return app
+
+
+def main():
+    app = create_application()
     window = GlassCatalogWindow()
     window.show()
     return app.exec()

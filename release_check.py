@@ -16,14 +16,14 @@ def run(report_path):
     try:
         from PySide6.QtCore import QPoint, QRect, Qt
         from PySide6.QtGui import QFont, QFontDatabase
-        from PySide6.QtWidgets import QApplication, QFileDialog, QTableWidget, QPushButton
+        from PySide6.QtWidgets import QFileDialog, QTableWidget, QPushButton
         import glass_catalog as gc
-        from glass_catalog_ui import GlassCatalogWindow
+        from glass_catalog_ui import GlassCatalogWindow, create_application
         import glass_catalog_ui as ui
         import zemax_catalog_manager as zm
         from codev_catalog_bundle import verify
-        app = QApplication.instance() or QApplication([])
-        app.setStyle("windows11")
+        app = create_application()
+        result["checks"].append("正常启动初始化、Windows应用标识与ctypes加载")
         for name in ("msyh.ttc", "msyhl.ttc", "segoeui.ttf"):
             QFontDatabase.addApplicationFont(str(Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / name))
         app.setFont(QFont("Microsoft YaHei UI", 10))
