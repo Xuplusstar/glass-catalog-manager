@@ -52,7 +52,7 @@ def main():
         args.report.with_suffix(".png").write_bytes(gui_report.with_suffix(".png").read_bytes())
         args.report.with_name(args.report.stem + "_DAT.png").write_bytes(gui_report.with_name(gui_report.stem + "_DAT.png").read_bytes())
         args.report.with_name(args.report.stem + "_DAT_small.png").write_bytes(gui_report.with_name(gui_report.stem + "_DAT_small.png").read_bytes())
-        for page in ("CODEV", "Zemax"):
+        for page in ("CODEV", "Zemax", "Sources"):
             args.report.with_name(args.report.stem + "_" + page + ".png").write_bytes(gui_report.with_name(gui_report.stem + "_" + page + ".png").read_bytes())
         record = "NM TEST 1 0 1.5 50 0 0 1\nCD 2.25 0 .008 0 0 0\nLD .3 2.5\nIT .5 .8 5\nIT .6 1 5\n"
         source = work / "CDGM202509.AGF"

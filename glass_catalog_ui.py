@@ -267,15 +267,24 @@ class GlassCatalogWindow(QMainWindow):
         browse_layout.setSpacing(10)
         self.pages["browse"] = browse
         self.page_stack.addWidget(browse)
-        self.expert_source_bar = QFrame()
-        self.expert_source_bar.setProperty("role", "card")
-        expert_source_layout = QHBoxLayout(self.expert_source_bar)
-        expert_source_layout.setContentsMargins(12, 8, 12, 8)
-        self.expert_source_summary = label("", "muted")
-        expert_source_layout.addWidget(self.expert_source_summary, 1)
-        expert_source_layout.addWidget(button("选择已安装库", self.choose_expert_catalogs, glyph="folder"))
-        expert_source_layout.addWidget(button("修改位置", lambda: self.show_page("settings"), "text"))
-        browse_layout.addWidget(self.expert_source_bar)
+        source_bar = QFrame()
+        source_bar.setProperty("role", "card")
+        source_layout = QHBoxLayout(source_bar)
+        source_layout.setContentsMargins(12, 8, 12, 8)
+        self.source_summary = label("", "muted")
+        source_layout.addWidget(self.source_summary)
+        self.source_catalog = QComboBox()
+        self.source_catalog.setMinimumContentsLength(12)
+        self.source_catalog.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.source_catalog.currentIndexChanged.connect(
+            lambda: self.source_catalog.setToolTip(self.source_catalog.currentData() or ""))
+        source_layout.addWidget(self.source_catalog, 1)
+        self.remove_source_button = button("移除选中库", self.remove_source_catalog)
+        self.remove_source_button.setToolTip("仅从当前工作区移除，保留原始文件和软件已安装的库。")
+        source_layout.addWidget(self.remove_source_button)
+        self.expert_location_button = button("库位置", lambda: self.show_page("codev"), "text")
+        source_layout.addWidget(self.expert_location_button)
+        browse_layout.addWidget(source_bar)
         toolbar = QHBoxLayout()
         toolbar.setSpacing(10)
         self.values = {"name": QLineEdit()}
@@ -650,6 +659,7 @@ class GlassCatalogWindow(QMainWindow):
         self.codev_root.editingFinished.connect(self.update_codev_directory)
         self.zemax_root.editingFinished.connect(self.update_zemax_directory)
         self.update_output_format()
+        self.apply_filters()
         self.update_codev_selection()
         self.update_zemax_selection()
         self.show_page("browse")
@@ -687,7 +697,7 @@ class GlassCatalogWindow(QMainWindow):
         if source_changed:
             value, self.name_suggestion = self.output_names[self.dat_mode]
             self.catalog_name.setText(value)
-        self.filter_scroll.setMaximumHeight((80 if self.dat_mode else 140) if self.height() < 720 else 240)
+        self.filter_scroll.setMaximumHeight(80 if self.height() < 720 else 240)
         self.format_buttons[fmt].setChecked(True)
         self.codev_installation.setVisible(fmt in {"xml", "dat"})
         self.zemax_installation.setVisible(fmt == "agf")
@@ -699,7 +709,7 @@ class GlassCatalogWindow(QMainWindow):
         self.prefix_source.setVisible(fmt != "dat")
         self.prefix_source.setEnabled(fmt != "dat")
         self.convertible_only.setVisible(fmt != "dat")
-        self.expert_source_bar.setVisible(fmt == "dat")
+        self.expert_location_button.setVisible(fmt == "dat")
         self.output_name_label.setText("清单名称" if self.dat_mode else "新库名称")
         self.add_button.setText("选择已安装库" if self.dat_mode else "添加玻璃库")
         self.empty_add_button.setText(self.add_button.text())
@@ -761,7 +771,7 @@ class GlassCatalogWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "filter_scroll"):
-            self.filter_scroll.setMaximumHeight((80 if self.dat_mode else 140) if self.height() < 720 else 240)
+            self.filter_scroll.setMaximumHeight(80 if self.height() < 720 else 240)
 
     def selected_glasses(self):
         return [self.filtered[index.row()] for index in self.table.selectionModel().selectedRows()]
@@ -944,19 +954,46 @@ class GlassCatalogWindow(QMainWindow):
         self.convertible_only.setChecked(False)
         self.apply_filters()
 
-    def apply_filters(self):
+    def refresh_source_catalogs(self):
+        catalogs = self.expert_catalogs if self.dat_mode else self.catalogs
+        selected = self.source_catalog.currentData()
+        self.source_catalog.clear()
+        self.source_summary.setText(f"{'DAT 来源库' if self.dat_mode else '已导入库'} · {len(catalogs)}")
+        self.source_catalog.setPlaceholderText("尚未选择已安装库" if self.dat_mode else "尚未导入玻璃库")
+        for catalog in catalogs:
+            self.source_catalog.addItem(f"{catalog.name} · {catalog.format.upper()} · {len(catalog.glasses)} 种", catalog.source)
+            self.source_catalog.setItemData(self.source_catalog.count() - 1, catalog.source, Qt.ItemDataRole.ToolTipRole)
+        index = self.source_catalog.findData(selected)
+        if catalogs:
+            self.source_catalog.setCurrentIndex(index if index >= 0 else 0)
+        self.source_catalog.setEnabled(bool(catalogs))
+        self.remove_source_button.setEnabled(bool(catalogs))
+
+    def remove_source_catalog(self):
+        index = self.source_catalog.currentIndex()
+        if index < 0:
+            return
+        catalogs = self.expert_catalogs if self.dat_mode else self.catalogs
+        removed = catalogs.pop(index)
+        # Keep the applied conditions even when a filter edit is still unfinished.
+        self.apply_filters(options=dict(self.active_filters))
+        self.notify(f"已从工作区移除 {removed.name}", f"原始文件保留，可重新添加：\n{removed.source}")
+
+    def apply_filters(self, *, options=None):
+        self.refresh_source_catalogs()
         try:
             catalogs = self.expert_catalogs if self.dat_mode else self.catalogs
             formats = {c.format for c in catalogs} or ({"xml"} if self.dat_mode else {"agf", "xml"})
             self.status.set_available({key for key in SUPPLY_STATUS_LABELS if
                                        (key.startswith("codev:") and "xml" in formats) or (key.startswith("agf:") and "agf" in formats)})
             self.melt_frequency_row.setVisible("agf" in formats)
-            options = {key: (entry.text().strip() if key == "name" else float(entry.text()) if entry.text().strip() else None)
-                       for key, entry in self.values.items()}
-            options["supply_status"] = self.status.values()
-            options["melt_frequency"] = self.melt_frequency.values() if "agf" in formats else None
-            options["supplier_grade"] = self.supplier_grade.values() if self.supplier_reference else None
-            options["convertible_only"] = self.convertible_only.isChecked() and not self.dat_mode
+            if options is None:
+                options = {key: (entry.text().strip() if key == "name" else float(entry.text()) if entry.text().strip() else None)
+                           for key, entry in self.values.items()}
+                options["supply_status"] = self.status.values()
+                options["melt_frequency"] = self.melt_frequency.values() if "agf" in formats else None
+                options["supplier_grade"] = self.supplier_grade.values() if self.supplier_reference else None
+                options["convertible_only"] = self.convertible_only.isChecked() and not self.dat_mode
             glasses = [g for c in catalogs for g in c.glasses]
             if self.supplier_reference:
                 glasses = enrich_glasses(glasses, self.supplier_reference)
@@ -999,8 +1036,6 @@ class GlassCatalogWindow(QMainWindow):
             self.count.setText(f"{len(self.filtered)} / {len(glasses)} 种材料" + (f"  ·  {issues} 种有提示" if issues else ""))
             self.library_summary.setText((f"已选 {len(catalogs)} 个已安装库" if catalogs else "尚未选择已安装库") if self.dat_mode else
                                          (f"已导入 {len(catalogs)} 个玻璃库" if catalogs else "尚未导入玻璃库"))
-            self.expert_source_summary.setText(f"CODE V 已安装库 · 已选 {len(catalogs)} 个" if self.dat_mode and catalogs else "材料来源：CODE V 已安装库")
-            self.expert_source_summary.setToolTip(self.codev_root.text().strip())
             self.table_stack.setCurrentWidget(self.table if self.filtered else self.empty_state)
             self.empty_title.setText("没有符合条件的材料" if catalogs else "选择 CODE V 已安装库" if self.dat_mode else "从一份玻璃库开始")
             self.empty_description.setText("试试调整或重置筛选条件。" if catalogs else

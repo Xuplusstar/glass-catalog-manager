@@ -74,10 +74,12 @@ class ManualExportTests(unittest.TestCase):
                     widgets = [self.app.nav_buttons["codev"], self.app.nav_buttons["zemax"]]
                     widgets += ([getattr(self.app, page + "_uninstall_button")] if page in {"codev", "zemax"} else
                                 [self.app.install_button, self.app.export_button, self.app.export_selection_button, self.app.catalog_name])
+                    if page == "browse":
+                        widgets += [self.app.source_catalog, self.app.remove_source_button]
                     for widget in widgets:
                         self.assertTrue(widget.isVisible())
                         bounds = QRect(widget.mapTo(self.app, QPoint()), widget.size())
-                        self.assertTrue(self.app.rect().contains(bounds), (widget.text(), bounds))
+                        self.assertTrue(self.app.rect().contains(bounds), (widget, bounds))
                     if page == "browse":
                         self.assertGreater(self.app.table.viewport().height(), 40)
 
@@ -167,6 +169,90 @@ class ManualExportTests(unittest.TestCase):
         self.assertEqual(self.app.catalogs, [])
         self.assertEqual(self.app.table.rowCount(), 0)
         self.assertIs(self.app.table_stack.currentWidget(), self.app.empty_state)
+
+    def test_remove_source_identifies_same_name_by_path_and_can_reimport(self):
+        second = self.work / "other/SOURCE.AGF"
+        second.parent.mkdir()
+        second.write_text(self.source.read_text().replace("NM TEST ", "NM SECOND "))
+        originals = {path: path.read_bytes() for path in (self.source, second)}
+        with patch("glass_catalog_ui.QFileDialog.getOpenFileNames", return_value=([str(second)], "")):
+            self.app.add_files()
+        self.assertEqual(self.app.source_catalog.count(), 2)
+        index = self.app.source_catalog.findData(str(self.source.resolve()))
+        self.app.source_catalog.setCurrentIndex(index)
+        self.assertEqual(self.app.source_catalog.toolTip(), str(self.source.resolve()))
+        self.app.table.selectRow(0)
+        self.app.remove_source_button.click()
+        self.assert_success()
+        self.assertEqual([c.source for c in self.app.catalogs], [str(second.resolve())])
+        self.assertEqual([g.name for g in self.app.filtered], ["SECOND"])
+        self.assertEqual(self.app.selected_glasses(), [])
+        self.assertTrue(self.app.count.text().startswith("1 / 1 种材料"))
+        self.assertEqual(self.app.catalog_name.text(), "CUSTOM")
+        self.app.set_output_format("agf")
+        self.export_to(self.work / "REMAINING.AGF")
+        self.assertEqual([g.name for g in gc.load_catalog(self.work / "REMAINING.AGF").glasses], ["SECOND"])
+        with patch("glass_catalog_ui.QFileDialog.getOpenFileNames", return_value=([str(self.source)], "")):
+            self.app.add_files()
+        self.assertEqual([g.name for g in self.app.filtered], ["SECOND", "TEST"])
+        self.assertTrue(all(path.read_bytes() == data for path, data in originals.items()))
+
+    def test_remove_source_preserves_applied_filters_and_updates_automatic_name(self):
+        second = self.work / "SECOND.AGF"
+        second.write_bytes(self.source.read_bytes())
+        with patch("glass_catalog_ui.QFileDialog.getOpenFileNames", return_value=([str(second)], "")):
+            self.app.add_files()
+        self.app.values["nd_min"].setText("1.5")
+        self.app.apply_filters()
+        self.app.update_catalog_name(force=True)
+        self.assertTrue(self.app.catalog_name.text().startswith("MIXED_FILTERED_"))
+        self.app.values["nd_min"].setText("-")
+        self.app.source_catalog.setCurrentIndex(self.app.source_catalog.findData(str(second.resolve())))
+        self.app.remove_source_button.click()
+        self.assert_success()
+        self.assertEqual([c.name for c in self.app.catalogs], ["SOURCE"])
+        self.assertEqual(self.app.active_filters["nd_min"], 1.5)
+        self.assertEqual(self.app.values["nd_min"].text(), "-")
+        self.assertEqual(len(self.app.filtered), 1)
+        self.assertTrue(self.app.catalog_name.text().startswith("SOURCE_FILTERED_"))
+
+    def test_remove_last_source_with_no_matching_materials_returns_to_empty_state(self):
+        self.app.values["name"].setText("NO_MATCH")
+        self.app.apply_filters()
+        self.assertEqual(self.app.filtered, [])
+        self.assertTrue(self.app.remove_source_button.isEnabled())
+        self.app.remove_source_button.click()
+        self.assertEqual(self.app.catalogs, [])
+        self.assertEqual(self.app.filtered, [])
+        self.assertEqual(self.app.table.rowCount(), 0)
+        self.assertEqual(self.app.source_catalog.count(), 0)
+        self.assertFalse(self.app.remove_source_button.isEnabled())
+        self.assertFalse(self.app.source_catalog.isEnabled())
+        self.assertIs(self.app.table_stack.currentWidget(), self.app.empty_state)
+        self.assertEqual(self.app.values["name"].text(), "NO_MATCH")
+        self.assertTrue(self.source.exists())
+
+    def test_remove_dat_source_keeps_conversion_workspace_and_installed_files(self):
+        (self.codev / "glass").mkdir()
+        paths = [self.codev / "glass" / (name + ".xml") for name in ("FIRST", "SECOND")]
+        for path in paths:
+            gc.export_catalog(self.app.filtered, path)
+        originals = {path: path.read_bytes() for path in paths}
+        self.app.expert_catalogs = [gc.load_catalog(path) for path in paths]
+        self.app.set_output_format("dat")
+        self.app.source_catalog.setCurrentIndex(self.app.source_catalog.findData(str(paths[0].resolve())))
+        self.app.remove_source_button.click()
+        self.assertEqual([c.name for c in self.app.expert_catalogs], ["SECOND"])
+        self.assertEqual([g.catalog for g in self.app.filtered], ["SECOND"])
+        self.export_to(self.work / "REMAINING.dat")
+        self.assertEqual((self.work / "REMAINING.dat").read_text().splitlines(), ["Catalog\tGlass", "SECOND\tTEST"])
+        self.app.set_output_format("xml")
+        self.assertEqual([c.source for c in self.app.catalogs], [str(self.source.resolve())])
+        self.assertEqual(self.app.source_catalog.count(), 1)
+        self.app.remove_source_button.click()
+        self.app.set_output_format("dat")
+        self.assertEqual([c.name for c in self.app.expert_catalogs], ["SECOND"])
+        self.assertTrue(all(path.read_bytes() == data for path, data in originals.items()))
 
     def test_default_export_and_bundle_install_have_no_alerts(self):
         output = self.work / "CUSTOM.xml"
@@ -477,7 +563,7 @@ class ManualExportTests(unittest.TestCase):
         for widget in (self.app.export_button, self.app.export_selection_button):
             self.assertTrue(self.app.rect().contains(QRect(widget.mapTo(self.app, QPoint()), widget.size())))
         self.app.set_output_format("xml")
-        self.assertEqual(self.app.filter_scroll.maximumHeight(), 140)
+        self.assertEqual(self.app.filter_scroll.maximumHeight(), 80)
         self.app.set_output_format("dat")
         self.qt_app.processEvents()
         self.assertGreater(self.app.table.viewport().height(), 40)

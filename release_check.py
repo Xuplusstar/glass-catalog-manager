@@ -67,6 +67,20 @@ def run(report_path):
             w.clear_supplier_table()
             assert len(w.filtered) == 2 and w.table.item(0, 9).text() == "—"
             result["checks"].append("厂家表读取、字母筛选、来源报告与清除")
+            extra_source = work / "OTHER.AGF"
+            extra_source.write_text(record.replace("NM TEST ", "NM EXTRA "), encoding="utf-8")
+            original_extra = extra_source.read_bytes()
+            w.catalogs.append(gc.load_catalog(extra_source))
+            assert w.apply_filters() and len(w.filtered) == 3
+            w.source_catalog.setCurrentIndex(w.source_catalog.findData(str(extra_source.resolve())))
+            w.show()
+            app.processEvents()
+            assert w.grab().save(str(Path(report_path).with_name(Path(report_path).stem + "_Sources.png")))
+            w.remove_source_button.click()
+            assert len(w.catalogs) == 1 and len(w.filtered) == 2
+            assert w.active_filters["transmission_min_percent"] == 80
+            assert w.source_catalog.count() == 1 and extra_source.read_bytes() == original_extra
+            result["checks"].append("单库移除同步材料与来源列表、保留筛选和原文件")
             w.update_catalog_name(force=True)
             assert w.catalog_name.text().startswith("CDGM202509_FILTERED_")
             w.catalog_name.setText("RUNTIME")
@@ -118,6 +132,13 @@ def run(report_path):
             assert json.loads(output.with_suffix(".dat.report.json").read_text(encoding="utf-8"))["reference_verification"]["checked"]
             assert all(p.read_bytes() == value for p, value in originals.items())
             result["checks"].append("已安装库选择、DAT 引用核对与软件目录保持原样")
+            dat_catalogs = list(w.expert_catalogs)
+            w.remove_source_button.click()
+            assert not w.expert_catalogs and not w.filtered and not w.remove_source_button.isEnabled()
+            assert len(w.catalogs) == 1 and all(p.read_bytes() == value for p, value in originals.items())
+            w.expert_catalogs = dat_catalogs
+            assert w.apply_filters() and len(w.filtered) == 2
+            result["checks"].append("DAT 来源单独移除、不影响转换来源和已安装库")
             w.show()
             app.processEvents()
             assert w.grab().save(str(Path(report_path).with_name(Path(report_path).stem + "_DAT.png")))
@@ -161,7 +182,8 @@ def run(report_path):
             w.filter_button.setChecked(True)
             w.notify("独立程序运行检查通过", "所有安装卸载都在临时目录中执行。")
             app.processEvents()
-            for widget in (w.install_button, w.export_button, w.nav_buttons["codev"], w.nav_buttons["zemax"]):
+            for widget in (w.install_button, w.export_button, w.nav_buttons["codev"], w.nav_buttons["zemax"],
+                           w.source_catalog, w.remove_source_button):
                 assert w.rect().contains(QRect(widget.mapTo(w, QPoint()), widget.size()))
             assert w.table.viewport().height() > 40
             assert w.notice.isVisible() and not w.notice_details.isVisible()

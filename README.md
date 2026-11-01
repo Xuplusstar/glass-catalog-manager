@@ -1,4 +1,4 @@
-# Zemax / CODE V 玻璃库管理 1.3.1
+# Zemax / CODE V 玻璃库管理 1.3.2
 
 同一个转换核心供人工窗口、AI skill 和独立命令行使用。支持 AGF ↔ CODE V XML、筛选组合建库、两边的材料库管理和 CODE V Glass Expert DAT 候选清单。无需 MATLAB。
 
@@ -6,7 +6,7 @@
 
 ## 人工使用与分享
 
-从 [GitHub Releases](https://github.com/Xuplusstar/glass-catalog-manager/releases) 下载 GlassCatalog-1.3.1-Windows-x64.zip，或使用本机构建的 release/ 中同名 ZIP。解压后进入 GlassCatalog 文件夹，双击 GlassCatalog.exe，不需要另装 Python。适用 Windows 10 / 11 x64。开发期间本机仍可双击“打开玻璃库管理.bat”，优先打开最新版打包程序，否则使用源码环境。
+从 [GitHub Releases](https://github.com/Xuplusstar/glass-catalog-manager/releases) 下载 GlassCatalog-1.3.2-Windows-x64.zip，或使用本机构建的 release/ 中同名 ZIP。解压后进入 GlassCatalog 文件夹，双击 GlassCatalog.exe，不需要另装 Python。适用 Windows 10 / 11 x64。开发期间本机仍可双击“打开玻璃库管理.bat”，优先打开最新版打包程序，否则使用源码环境。
 
 程序目录固定为 GlassCatalog，ZIP 文件名标注版本。可对 GlassCatalog.exe 创建桌面或开始菜单快捷方式，直接打开软件。以后更新时先退出程序，再将新版 GlassCatalog 解压到相同位置替换文件，原快捷方式继续可用；不移动程序文件夹。旧版带版本号的解压目录首次迁移后需重新创建一次快捷方式。本机构建的固定入口为 release/GlassCatalog/GlassCatalog.exe。
 
@@ -24,6 +24,8 @@
 | Zemax 库管理 | 已安装库查看、双击载入工作区、安装已有 AGF、备份、卸载及恢复 |
 
 两个管理页均按“安装位置 → 安装操作 → 已安装库列表 → 选中库操作”排列，转换输出栏只在工作区出现。安装位置在各管理页修改，“导出设置”显示当前目标并提供跳转。
+
+工作区顶部的“已导入库”下拉列表显示各来源库、格式和材料数，悬停可查看完整文件路径。选库后点击“移除选中库”，只从当前工作区移除这一份库，保留原始文件、其他库和已应用的筛选条件；材料列表、计数与自动名称同步更新，也可重新添加。下拉选择只指定要移除的库，材料列表仍合并显示当前所有来源。DAT 模式同样支持逐库移除，且不影响 AGF/XML 工作区或软件中已安装的库。“清空”仍移除当前模式的全部来源并重置筛选。
 
 新库自动按“来源库＋筛选标记＋日期”命名，例如 `CDGM_MA_A_B_20261030`；多来源用 `MIXED`，其他筛选加 `FILTERED`，DAT 加 `EXPERT`。来源名中的空格和连字符改为下划线。可手动修改，后续筛选不会覆盖手工名称；“自动命名”重新采用当前建议。DAT 与 AGF/XML 各自记住名称。
 
@@ -172,7 +174,7 @@ python -m venv .build-venv
 $env:QT_QPA_PLATFORM='offscreen'
 python -X utf8 -m unittest discover -s tests -v
 GlassCatalog.exe --self-check <验证报告.json>
-python -X utf8 verify_release.py release/GlassCatalog-1.3.1-Windows-x64.zip --report build/verification.json
+python -X utf8 verify_release.py release/GlassCatalog-1.3.2-Windows-x64.zip --report build/verification.json
 ~~~
 
 独立程序自检使用合成材料和临时软件目录，核对打包后模块、样式资源、筛选与各文件流程，不打开或操控桌面。真实 Zemax / CODE V 中的导入识别及热学语义验收尚未完成；不将本版称为全公式 / 全属性无损转换器。
