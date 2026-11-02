@@ -1,30 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <defs>
-    <linearGradient id="background" x1="24" y1="18" x2="228" y2="240" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#263C60"/>
-      <stop offset="1" stop-color="#111C30"/>
+    <linearGradient id="barrel" x1="48" y1="28" x2="202" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#555D68"/>
+      <stop offset=".48" stop-color="#303640"/>
+      <stop offset="1" stop-color="#171C24"/>
     </linearGradient>
-    <linearGradient id="bottom" x1="48" y1="158" x2="208" y2="196" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#38BDF8"/>
-      <stop offset="1" stop-color="#3868E8"/>
-    </linearGradient>
-    <linearGradient id="middle" x1="48" y1="124" x2="208" y2="168" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#A5F3FC"/>
-      <stop offset="1" stop-color="#53A2F5"/>
-    </linearGradient>
-    <linearGradient id="top" x1="76" y1="62" x2="174" y2="126" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#E0FAFF"/>
-      <stop offset=".5" stop-color="#8FE3F8"/>
-      <stop offset="1" stop-color="#4CB1F1"/>
+    <radialGradient id="glass" cx=".34" cy=".24" r=".88">
+      <stop stop-color="#338CB3"/>
+      <stop offset=".52" stop-color="#174D70"/>
+      <stop offset="1" stop-color="#102035"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="66" y1="44" x2="190" y2="216" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A9B3BE"/>
+      <stop offset=".5" stop-color="#5B6776"/>
+      <stop offset="1" stop-color="#374352"/>
     </linearGradient>
   </defs>
-  <rect x="16" y="16" width="224" height="224" rx="52" fill="url(#background)"/>
-  <rect x="17" y="17" width="222" height="222" rx="51" fill="none" stroke="#9AB5DC" stroke-opacity=".18" stroke-width="2"/>
-  <path d="M48 155 128 111 208 155 208 167 128 211 48 167Z" fill="#2454B8"/>
-  <path d="M48 155 128 111 208 155 128 199Z" fill="url(#bottom)"/>
-  <path d="M48 121 128 77 208 121 208 133 128 177 48 133Z" fill="#2580D0"/>
-  <path d="M48 121 128 77 208 121 128 165Z" fill="url(#middle)"/>
-  <path d="M48 87 128 43 208 87 208 99 128 143 48 99Z" fill="#3D95D6"/>
-  <path d="M48 87 128 43 208 87 128 131Z" fill="url(#top)"/>
-  <path d="M59 87 128 49 197 87M59 121 128 159M59 155 128 193" fill="none" stroke="#F0FDFF" stroke-opacity=".76" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="128" cy="128" r="111" fill="url(#barrel)" stroke="#64707D" stroke-width="2"/>
+  <circle cx="128" cy="128" r="96" fill="#171E29" stroke="url(#rim)" stroke-width="3"/>
+  <circle cx="128" cy="128" r="77" fill="url(#glass)" stroke="#0F1723" stroke-width="6"/>
+  <circle cx="128" cy="128" r="43" fill="#101F32" stroke="#347897" stroke-opacity=".55" stroke-width="2"/>
+  <path d="M76 102a58 58 0 0 1 46-32" fill="none" stroke="#BEE9F4" stroke-width="9" stroke-linecap="round" opacity=".86"/>
+  <path d="M160 180a60 60 0 0 0 23-30" fill="none" stroke="#55B7D5" stroke-width="6" stroke-linecap="round" opacity=".65"/>
 </svg>
