@@ -1,0 +1,11 @@
+Glass pane application icon
+
+Source: https://www.svgrepo.com/svg/308606/glass-window-transparent-transparency
+Title: Glass Window Transparent Transparency
+Publisher: SVG Repo
+License: CC0 1.0 Universal Public Domain Dedication
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The SVG is used as the application icon and rendered into Windows ICO sizes.
+A thin white keyline is added for contrast on dark backgrounds; the original
+glass-pane geometry and black foreground are retained.
